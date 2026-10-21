@@ -55,6 +55,7 @@ dev = [
 # =============================================================================
 [project.scripts]
 odp-init = "od_platform.cli.init_project:initialize_project"
+odp-reset = "od_platform.cli.reset_project:main"
 
 
 # =============================================================================
