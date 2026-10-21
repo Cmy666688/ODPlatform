@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  : string_utils.py
 # @Author    : ODPlatform Team
 # @Project   : ODPlatform
@@ -78,7 +77,7 @@ def format_table_row(columns: list, widths: list, aligns: list = None) -> str:
 
     parts = [
         pad_to_width(str(col), w, a)
-        for col, w, a in zip(columns, widths, aligns)
+        for col, w, a in zip(columns, widths, aligns, strict=False)
     ]
     return ' '.join(parts)
 

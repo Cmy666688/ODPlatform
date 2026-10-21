@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  : performance_utils.py
 # @Author    : ODPlatform Team
 # @Project   : ODPlatform
@@ -7,8 +6,8 @@
 
 import logging
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Optional, Union
 
 # 业务模块标准写法
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def time_it(
     iterations: int = 1,
-    name: Optional[Union[str, Callable[..., str]]] = None,
+    name: str | Callable[..., str] | None = None,
     logger_instance: logging.Logger = None,
 ):
     """

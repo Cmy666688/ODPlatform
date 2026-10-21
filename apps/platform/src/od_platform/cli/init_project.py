@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  : init_project.py
 # @Author    : ODPlatform Team
 # @Project   : ODPlatform
@@ -7,18 +6,17 @@
 
 import logging
 from pathlib import Path
-from typing import List
 
+from od_platform.common.logging_utils import get_logger
 from od_platform.common.paths import (
-    ROOT_DIR,
     LOGGING_DIR,
     RAW_DATA_DIR,
+    ROOT_DIR,
     get_dirs_to_initialize,
 )
-from od_platform.common.logging_utils import get_logger
 from od_platform.common.performance_utils import time_it
-from od_platform.common.system_utils import log_device_info
 from od_platform.common.string_utils import format_table_row, format_table_separator
+from od_platform.common.system_utils import log_device_info
 
 LINE_WIDTH: int = 60
 
@@ -26,9 +24,9 @@ LINE_WIDTH: int = 60
 logger = logging.getLogger(__name__)
 
 
-def _check_raw_data_status() -> List[str]:
+def _check_raw_data_status() -> list[str]:
     """检查 raw 数据目录的状态"""
-    raw_status: List[str] = []
+    raw_status: list[str] = []
     rel_raw = RAW_DATA_DIR.relative_to(ROOT_DIR)
 
     if not RAW_DATA_DIR.exists():
@@ -79,8 +77,8 @@ def initialize_project() -> None:
     # 2. 创建项目核心目录
     logger.info("检查并创建项目核心目录".center(LINE_WIDTH, '='))
 
-    created: List[Path] = []
-    existed: List[Path] = []
+    created: list[Path] = []
+    existed: list[Path] = []
 
     for d in get_dirs_to_initialize():
         rel = d.relative_to(ROOT_DIR)

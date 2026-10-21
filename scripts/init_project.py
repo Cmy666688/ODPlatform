@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  : scripts/init_project.py
 # @Author    : ODPlatform Team
 # @Function  : 项目初始化的【开发阶段入口】(无需安装 package)

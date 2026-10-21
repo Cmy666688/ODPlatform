@@ -25,6 +25,11 @@ src = [
 select = ["E", "W", "F", "I", "B", "C4", "UP"]
 ignore = ["E501"]
 
+# scripts/ 下的开发期入口必须先改 sys.path 再导入 src,
+# E402(导入不在文件顶部)是该模式的必然产物,豁免之
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["od_platform"]
 

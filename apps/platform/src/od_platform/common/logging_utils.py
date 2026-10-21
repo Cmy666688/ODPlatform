@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  : logging_utils.py
 # @Author    : ODPlatform Team
 # @Project   : ODPlatform
@@ -12,13 +11,12 @@
 #               之后所有 getLogger(__name__) 通过冒泡机制自动继承
 
 import logging
-import sys
 import platform
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from colorlog import ColoredFormatter
 
+from colorlog import ColoredFormatter
 
 # 项目根 logger 名 = 顶层 Python 包名
 # 业务模块写 getLogger("od_platform.xxx.yyy") 会通过冒泡找到这里挂的 handler
@@ -28,7 +26,7 @@ ROOT_LOGGER_NAME: str = "od_platform"
 def get_logger(
     base_path: Path,
     log_type: str = "general",
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
     log_level: int = logging.INFO,
     temp_log: bool = False,
     encoding: str = "utf-8",
@@ -137,7 +135,7 @@ def get_logger(
     # 6. 初始化信息
     # ============================================================
     logger.info('=' * 60)
-    logger.info(f"日志系统初始化完成")
+    logger.info("日志系统初始化完成")
     logger.info(f"运行环境: {platform.system()} {platform.release()}")
     logger.info(f"阶段类型: {log_type}")
     logger.info(f"日志文件: {log_file}")

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  : system_utils.py
 # @Author    : ODPlatform Team
 # @Project   : ODPlatform
@@ -7,11 +6,10 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import time
-import logging
-from typing import Optional
 
 from od_platform.common.string_utils import pad_to_width
 
@@ -98,7 +96,7 @@ def get_basic_device_info() -> dict:
     }
 
 
-def log_device_info(target_logger: Optional[logging.Logger] = None) -> dict:
+def log_device_info(target_logger: logging.Logger | None = None) -> dict:
     """把环境信息打印到 logger。
 
     Args:
