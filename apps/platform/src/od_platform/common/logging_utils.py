@@ -18,6 +18,8 @@ from pathlib import Path
 
 from colorlog import ColoredFormatter
 
+from od_platform.common.naming import run_stem
+
 # 项目根 logger 名 = 顶层 Python 包名
 # 业务模块写 getLogger("od_platform.xxx.yyy") 会通过冒泡找到这里挂的 handler
 ROOT_LOGGER_NAME: str = "od_platform"
@@ -31,6 +33,8 @@ def get_logger(
     temp_log: bool = False,
     encoding: str = "utf-8",
     logger_name: str = ROOT_LOGGER_NAME,
+    run_id: str | None = None,          # ★ D6 新增, 可选
+    dataset_name: str | None = None,    # ★ D6 新增, 可选
 ) -> logging.Logger:
     """
     配置项目【根 logger】, 挂上 console + file handler。
@@ -79,18 +83,26 @@ def get_logger(
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # ============================================================
-    # 3. 构造日志文件名: <prefix>_<timestamp>[_<model>].log
+    # 3. 构造日志文件名
     # ============================================================
-    timestamp: str = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:21]
-    prefix = "temp" if temp_log else log_type.replace("_", "-")
+    # ★ D6: 只加分支, 不改分支。
+    #   run_id 为 None(D1-D5 的命令) -> else, 与原行为【逐字节一致】(带微秒, '_' 分隔);
+    #   run_id 有值(odp-train)      -> if, 交给 run_stem(): <stage>-<run_id>[-<ds>][-<model>].log
+    if run_id:
+        stem = run_stem(stage=("temp" if temp_log else log_type),
+                        run_id=run_id, dataset=dataset_name, model=model_name)
+        log_file: Path = log_dir / f"{stem}.log"
+    else:
+        timestamp: str = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:21]
+        prefix = "temp" if temp_log else log_type.replace("_", "-")
 
-    filename_parts = [prefix, timestamp]
-    if model_name:
-        safe_model = "".join(
-            c if c.isalnum() or c in "_-" else "_" for c in model_name
-        )
-        filename_parts.append(safe_model)
-    log_file: Path = log_dir / ("_".join(filename_parts) + ".log")
+        filename_parts = [prefix, timestamp]
+        if model_name:
+            safe_model = "".join(
+                c if c.isalnum() or c in "_-" else "_" for c in model_name
+            )
+            filename_parts.append(safe_model)
+        log_file = log_dir / ("_".join(filename_parts) + ".log")
 
     # ============================================================
     # 4. 文件 Handler(完整格式, 含 logger 名)
