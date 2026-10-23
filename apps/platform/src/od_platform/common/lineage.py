@@ -15,12 +15,46 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 TOOL_VERSION = "odp-transform/0.4"       # 契约版本:指纹配方变动时升号
 
 
 def _sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
+
+
+def canonical_sha256(obj: Any) -> str:
+    """对任意可 JSON 化对象做【规范化哈希】。指纹体系里所有哈希的唯一实现。
+
+    规范化是可复现的前提(否则字典/列表顺序一变指纹就变):
+      · sort_keys=True   键序无关
+      · separators 紧凑  空白无关
+      · ensure_ascii=False 中文按原样进哈希
+
+    ★ 为什么抽出来: 原本这段逻辑埋在 compute_contract_fingerprint 里。
+      compute_data_fingerprint 出现后, 它有了第二个使用者 —— 同一个规范化算法
+      绝不能有两份实现, 否则两枚指纹哪天规范化方式漂了, 整个指纹体系就对不上。
+      算法只此一份, 谁要哈希谁调它。
+    """
+    blob = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def compute_data_fingerprint(samples: list["SampleLineage"]) -> str:
+    """这【批数据】的身份 —— 与 seed / 比例 / 策略 / 工具版本全部无关。
+
+    ★ 与 contract_fingerprint 的唯一区别: 【不含 split】。
+      进哈希的是每个样本的 (stem, sha256) 二元组 —— 只问"有哪些样本、内容是什么",
+      不问"它被划到哪一组"。于是换个 seed 重新划分, 这枚指纹不变。
+
+    回答的问题: "还是同一批数据吗"。
+    (contract_fingerprint 回答的是"还是同一次划分吗" —— split 进了它的哈希。)
+
+    纯派生: 原料(每条 sha256)本就在 manifest.samples 里, 不改 manifest 格式、
+    不重跑 D3、历史 manifest 立即可用。
+    """
+    return canonical_sha256(sorted((s.stem, s.sha256) for s in samples))
 
 
 @dataclass(frozen=True)
@@ -54,9 +88,7 @@ def compute_contract_fingerprint(
         "samples": sorted((s.stem, s.split, s.sha256) for s in samples),
         "tool_version": tool_version,
     }
-    blob = json.dumps(canonical, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")).encode("utf-8")
-    return _sha256_bytes(blob)
+    return canonical_sha256(canonical)
 
 
 @dataclass
