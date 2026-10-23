@@ -8,7 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from od_platform.common import paths
+from od_platform.common import paths, stamp
+from od_platform.common.lineage import compute_data_fingerprint
+from od_platform.data_validation import VALIDATOR_VERSION
+from od_platform.data_validation.checks._lineage import load_manifest_from_yaml
 from od_platform.data_validation.registry import (
     CheckContext, CheckEntry, CheckResult, CheckSeverity, get_all_checks,
 )
@@ -46,4 +49,23 @@ def validate_dataset(yaml_path, task_type: Optional[str] = None,
         out_dir.mkdir(parents=True, exist_ok=True)
         report.write_json(out_dir / "report.json")
         report.write_results_csv(out_dir / "results.csv")
+
+    # ★ 盖 validate 章: 我(D4)验过这批数据。仅在【能定位到 manifest】时盖 ——
+    #   没有 manifest 的数据集(非 odp-transform 产出)谈不上流转卡, 跳过。
+    manifest, _err, _odp = load_manifest_from_yaml(snapshot.yaml_data)
+    if manifest is not None:
+        # data_fingerprint 从【manifest.samples 自己算】—— 不读 D3 的章、不抄它的指纹
+        data_fp = compute_data_fingerprint(manifest.samples)
+        stamp.write_stamp(
+            stage_file=stamp.STAMP_VALIDATE,
+            data_fingerprint=data_fp,
+            run_id=run_id,
+            tool_version=VALIDATOR_VERSION,
+            payload={
+                "contract_fingerprint": manifest.contract_fingerprint,
+                "overall_severity": report.overall_severity,
+                "n_checks": len(report.results),
+                "report_ref": f"runs/data_validation/{run_id}/report.json",
+            },
+        )
     return report
