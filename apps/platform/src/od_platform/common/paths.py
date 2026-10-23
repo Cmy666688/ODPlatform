@@ -83,6 +83,10 @@ LOGGING_DIR: Path = APP_DIR / "logging"
 UNIT_TEST_DIR: Path = APP_DIR / "tests"
 
 
+# 数据集 yaml 的家(Ultralytics 约定)
+DATASET_CONFIGS_DIR: Path = CONFIGS_DIR / "datasets"
+
+
 # ============================================================
 # 【顶层文档目录】(共享给所有人)
 # ============================================================
@@ -129,6 +133,7 @@ def get_dirs_to_initialize() -> list[Path]:
         PROCESSED_DATA_DIR,
         # 端私有资产
         CONFIGS_DIR,
+        DATASET_CONFIGS_DIR,
         LOGGING_DIR,
         UNIT_TEST_DIR,
         # 工程基础设施
@@ -207,6 +212,31 @@ def is_protected(path: Path) -> bool:
         if protected_resolved.is_relative_to(path):
             return True
     return False
+
+
+# ============================================================
+# 【数据集路径解析】(D3 数据流水线增量)
+# ============================================================
+def raw_dataset_root(name: str) -> Path:
+    return RAW_DATA_DIR / name
+
+
+def dataset_processed_dir(name: str) -> Path:
+    return PROCESSED_DATA_DIR / name
+
+
+def dataset_yaml_path(name: str) -> Path:
+    return DATASET_CONFIGS_DIR / f"{name}.yaml"
+
+
+# ============================================================
+# 【数据验证产物目录】(D4 数据质检增量)
+# ============================================================
+VALIDATION_RUNS_DIR: Path = RUNS_DIR / "data_validation"   # 质检报告的家(按需创建,不进 init 清单)
+
+
+def validation_run_dir(run_id: str) -> Path:
+    return VALIDATION_RUNS_DIR / run_id
 
 
 if __name__ == "__main__":
