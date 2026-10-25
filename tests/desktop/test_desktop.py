@@ -152,3 +152,11 @@ def test_stop_before_worker_starts_is_preserved(window, qapp, monkeypatch, tmp_p
     window._on_stop()
     _wait(qapp, lambda: window._thread is None)
     assert seen == [True]
+
+
+def test_backend_selection_uses_crackmap_defaults(window):
+    window.backend_combo.setCurrentText("MixerCSeg")
+    assert window.le_model.text().endswith("checkpoint_CrackMap.pth")
+    assert "crackmap" in window.le_source.text()
+    window.backend_combo.setCurrentText("YOLO")
+    assert window.le_model.text() == "yolov8n.pt"

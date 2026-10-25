@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+import yaml
+
 from od_platform.common import paths, stamp
 from od_platform.common.lineage import compute_data_fingerprint
 from od_platform.data_validation import VALIDATOR_VERSION
@@ -39,6 +41,13 @@ def validate_dataset(yaml_path, task_type: Optional[str] = None,
     t0 = time.perf_counter()
     run_id = run_id or datetime.now().strftime("%Y%m%d-%H%M%S")
     yaml_path = Path(yaml_path)
+    try:
+        document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        document = None                          # 坏 YAML 交回原快照流程报告 ERROR
+    if isinstance(document, dict) and document.get("format") == "semantic_masks":
+        from od_platform.data_validation.semantic import validate_semantic_dataset
+        return validate_semantic_dataset(yaml_path, run_id=run_id, write_report=write_report)
     snapshot = build_snapshot(yaml_path, task_type=task_type)
     results = run_all_checks(CheckContext(yaml_path=yaml_path, snapshot=snapshot))
     report = ValidationReport(run_id=run_id, snapshot=snapshot, results=results,

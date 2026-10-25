@@ -30,6 +30,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description="ODPlatform YOLO 推理 CLI",
     )
     # ---- 输入输出 ----
+    p.add_argument("--backend", choices=("yolo", "mixercseg"), default="yolo")
     p.add_argument("--source", type=str, default=None,
                    help="输入源: 摄像头号(0/1) / 视频文件 / 图片或目录 / RTSP. 不传则用 infer.yaml.")
     p.add_argument("--model", type=str, default=None,
@@ -84,6 +85,9 @@ def _ns_to_cli_args(ns: argparse.Namespace) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ns = _build_parser().parse_args(argv)
+    if ns.backend == "mixercseg":
+        from od_platform.cli.mixercseg import infer_main
+        return infer_main(ns)
 
     # ★ 纪律 B: 整个进程里【唯一】装 handler 的地方
     get_logger(

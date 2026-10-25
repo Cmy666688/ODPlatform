@@ -1,0 +1,10 @@
+# 官方 CrackMap checkpoint 使用 180 bins,与源码的 36 bins 不同。
+backend: mixercseg
+data: crackmap
+model: models/pretrained/checkpoint_CrackMap.pth
+hog_bins: 180
+device: auto
+load_width: 512
+load_height: 512
+threshold: 0.5
+torch_threads: 4

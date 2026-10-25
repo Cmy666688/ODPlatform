@@ -2,6 +2,17 @@
 
 通用目标检测开发平台（Monorepo）。
 
+已接入 **MixerCSeg 裂缝语义分割**，默认示例为较小的 CrackMap 数据集。
+数据质检、原始训练参数、HOG 权重差异和 D7 掩膜可视化见
+[MixerCSeg 使用说明](docs/mixercseg.md)。原有 YOLO 命令保持兼容。
+
+```bash
+pip install -e "./apps/platform[dev,desktop,mixercseg]"
+odp-prepare-cracks --dataset CrackMap
+odp-train --backend mixercseg --config mixercseg_train
+# 官方权重下载、推理与可视化命令见 docs/mixercseg.md
+```
+
 - `apps/platform/` — 核心引擎（数据转换、训练、推理）
 - `apps/web-backend/` — Web 后端服务（占位，V1.1）
 - `apps/desktop/` — PySide6 桌面推理示例（可选）

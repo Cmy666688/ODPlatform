@@ -198,7 +198,9 @@ class _Renderer(Thread):
             frame, result, labels, n = item
             t0 = time.perf_counter()
             try:
-                annotated = self._proc.draw(frame.image, result, labels, n)
+                draw_frame = getattr(self._proc, "draw_frame", None)
+                annotated = (draw_frame(frame, result, labels, n) if draw_frame is not None
+                             else self._proc.draw(frame.image, result, labels, n))
             except Exception as e:
                 logger.warning(f"渲染单帧失败, 跳过: {e}")
                 continue

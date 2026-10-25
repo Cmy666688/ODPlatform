@@ -1,0 +1,7 @@
+# D7 帧源配置沿用默认,裂缝掩膜单独配置。
+visualization:
+  enabled: true
+  mask:
+    alpha: 0.45
+    color: [0, 255, 0]
+    contour_thickness: 1

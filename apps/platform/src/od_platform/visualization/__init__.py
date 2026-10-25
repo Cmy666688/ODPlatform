@@ -20,6 +20,7 @@
 from .detection import Detection
 from .style import Color, DrawStyle, to_bgr_tuple
 from .visualizer import BeautifyVisualizer
+from .segmentation import MaskStyle, MaskVisualizer
 
 __all__ = [
     "BeautifyVisualizer",
@@ -27,4 +28,6 @@ __all__ = [
     "Detection",
     "Color",
     "to_bgr_tuple",
+    "MaskStyle",
+    "MaskVisualizer",
 ]

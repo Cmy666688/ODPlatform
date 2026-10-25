@@ -17,7 +17,7 @@ import numpy as np
 from PySide6.QtCore import QThread, QTimer, Qt, Slot
 from PySide6.QtGui import QCloseEvent, QImage, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QApplication, QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
     QProgressBar, QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -53,6 +53,10 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(central)
 
         row_model = QHBoxLayout()
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItems(["YOLO", "MixerCSeg"])
+        self.backend_combo.currentTextChanged.connect(self._on_backend_changed)
+        row_model.addWidget(self.backend_combo)
         row_model.addWidget(QLabel("模型:"))
         self.le_model = QLineEdit("yolov8n.pt")
         row_model.addWidget(self.le_model, 1)
@@ -96,7 +100,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def _browse_model(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(self, "选择模型权重", str(paths.TRAINED_MODELS_DIR),
-                                                "模型文件 (*.pt *.onnx);;所有文件 (*)")
+                                                "模型文件 (*.pt *.pth *.onnx);;所有文件 (*)")
         if filename:
             self.le_model.setText(filename)
 
@@ -112,9 +116,18 @@ class MainWindow(QMainWindow):
         if folder:
             self.le_source.setText(folder)
 
+    @Slot(str)
+    def _on_backend_changed(self, backend: str) -> None:
+        if backend == "MixerCSeg":
+            self.le_model.setText(str(paths.PRETRAINED_MODELS_DIR / "checkpoint_CrackMap.pth"))
+            self.le_source.setText(str(paths.dataset_processed_dir("crackmap") / "images/test"))
+        else:
+            self.le_model.setText("yolov8n.pt")
+            self.le_source.setText("0")
+
     def _set_running(self, running: bool) -> None:
         for widget in (self.btn_start, self.le_model, self.le_source,
-                       self.btn_model, self.btn_source, self.btn_folder):
+                       self.btn_model, self.btn_source, self.btn_folder, self.backend_combo):
             widget.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         self.progress.setVisible(running)
@@ -131,7 +144,8 @@ class MainWindow(QMainWindow):
         self._token = CancelToken()
         self._sink = QtSignalSink()
         self._sink.signals.frame_ready.connect(self._on_frame, Qt.ConnectionType.QueuedConnection)
-        self._worker = InferWorker(model, source, self._sink, self._token)
+        self._worker = InferWorker(model, source, self._sink, self._token,
+                                   backend=self.backend_combo.currentText().lower())
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.start_infer)

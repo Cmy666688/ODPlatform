@@ -17,6 +17,8 @@
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# 固定版本的第三方模型保留上游排版,平台适配层照常检查。
+extend-exclude = ["apps/platform/src/od_platform/backends/mixercseg/_vendor"]
 src = [
     "apps/platform/src",
 ]
@@ -47,11 +49,17 @@ warn_unused_ignores = true
 no_implicit_optional = true
 explicit_package_bases = true
 mypy_path = ["apps/platform/src"]
+exclude = ["backends/mixercseg/_vendor/"]
 
 [[tool.mypy.overrides]]
 module = ["colorlog.*", "psutil.*", "ultralytics.*", "torch.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["od_platform.backends.mixercseg._vendor.*", "timm.*", "fvcore.*", "mmengine.*", "gdown.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
 
 
 # =============================================================================

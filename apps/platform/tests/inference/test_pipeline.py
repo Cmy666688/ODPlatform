@@ -190,3 +190,16 @@ def test_incomplete_model_batch_fails_instead_of_silently_dropping_frames(make_i
     pipe.proc = IncompleteProcessor()
     with pytest.raises(ValueError, match="zip"):
         pipe.run(stats)
+
+
+def test_semantic_renderer_receives_frame_metadata(make_images):
+    pipe, stats = _build(make_images(2), batch=1)
+    seen = []
+    class MetadataProcessor(FakeProcessor):
+        def draw_frame(self, frame, result, labels, n):
+            seen.append(frame.info.filename)
+            return self.draw(frame.image, result, labels, n)
+    pipe.proc = MetadataProcessor()
+    pipe.run(stats)
+    assert len(seen) == stats.frames == 2
+    assert all(name.endswith(".jpg") for name in seen)

@@ -1,0 +1,28 @@
+# MixerCSeg 源码训练配方,固定上游 7ad3fd6fd0e9bc60d1eb9c3b50292d876485dd1d。
+# 原版参数来自 main.py;hog_bins=36 来自 models/encoder/vss_block.py。
+# device=auto 仅为本机 CPU/CUDA 适配;不把 YOLO 的参数混进来。
+backend: mixercseg
+data: crackmap
+model: null
+device: auto
+BCELoss_ratio: 0.87
+DiceLoss_ratio: 0.13
+Norm_Type: GN
+hog_bins: 36
+batch_size_train: 1
+batch_size_test: 1
+lr_scheduler: PolyLR
+lr: 0.0005
+min_lr: 0.000001
+weight_decay: 0.01
+epochs: 50
+seed: 42
+num_threads: 1
+load_width: 512
+load_height: 512
+torch_threads: 4
+experiment_name: mixercseg-crackmap
+threshold: 0.5
+# 仅冒烟时显式覆盖;正常训练保留 null,不能拿限批结果当完整训练指标。
+max_train_batches: null
+max_eval_batches: null

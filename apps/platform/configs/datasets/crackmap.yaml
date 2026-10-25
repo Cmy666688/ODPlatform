@@ -1,0 +1,17 @@
+format: semantic_masks
+task: semantic_segment
+path: data/processed/crackmap
+names:
+  0: background
+  1: crack
+splits:
+- train
+- val
+- test
+source:
+  repository: https://github.com/spiderforest/MixerCSeg
+  commit: 7ad3fd6fd0e9bc60d1eb9c3b50292d876485dd1d
+  dataset: CrackMap
+  alpha_policy: discard; RGB image and single-channel binary mask
+manifest_path: runs/data_pipeline/20261025-182912/semantic_manifest.json
+data_fingerprint: a4fc03643174f74cf7be76ce856727c9ba90af263bf6600208b8b09ed7bb4396

@@ -4,6 +4,9 @@
 停止和关闭窗口均在桌面端实现。引擎通过 `OutputSink` / `InferHooks` /
 `CancelToken` 三个接缝与 UI 连接。
 
+顶部可选 YOLO 或 MixerCSeg。MixerCSeg 需要安装 `[desktop,mixercseg]`，
+准备 CrackMap 数据和官方 checkpoint，详见 [MixerCSeg 使用说明](../../docs/mixercseg.md)。
+
 ## 安装与运行
 
 在仓库根目录执行：

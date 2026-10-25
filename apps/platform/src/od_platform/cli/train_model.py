@@ -19,13 +19,15 @@ from od_platform.common.run_context import RunContext
 from od_platform.runtime_config import build_train_config
 from od_platform.training.service import train_yolo
 
-_CLI_SWITCHES = {"config", "no_archive", "skip_validate"}
+_CLI_SWITCHES = {"config", "no_archive", "skip_validate", "backend", "smoke_batches"}
 
 
 def _build_parser() -> argparse.ArgumentParser:
     """构造解析器。⚠️ 配置字段 default 一律不给(全 None): 默认值唯一真相是 Pydantic 的
     Field(default=...); argparse 再给会永远覆盖 YAML。没传就是 None = 我没表态。"""
     p = argparse.ArgumentParser(prog="odp-train", description="ODPlatform 训练命令")
+    p.add_argument("--backend", choices=("yolo", "mixercseg"), default="yolo")
+    p.add_argument("--smoke-batches", type=int, default=None, help="MixerCSeg 冒烟限批数,写入审计")
     p.add_argument("--config", default="train", help="运行配置引用: 'train'/'train.yaml'/路径")
     p.add_argument("--no-archive", action="store_true", help="不归档 best.pt")
     p.add_argument("--skip-validate", action="store_true",
@@ -61,6 +63,9 @@ def _collect_cli_overrides(args: argparse.Namespace) -> Dict[str, Any]:
 
 def main() -> int:
     args = _build_parser().parse_args()
+    if args.backend == "mixercseg":
+        from od_platform.cli.mixercseg import train_main
+        return train_main(args)
     cli_overrides = _collect_cli_overrides(args)
 
     # 1) 配置(D5)。--config 支持名字或路径。

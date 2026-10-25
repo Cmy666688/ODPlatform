@@ -46,6 +46,7 @@ class PipelineConfig:
     default_color: tuple[int, int, int] = (0, 255, 0)
     font_path: Optional[str] = None
     style_overrides: dict[str, Any] = field(default_factory=dict)   # 透传给 DrawStyle.from_image_size
+    mask_style: dict[str, Any] = field(default_factory=dict)        # 语义掩膜独立样式
 
     def build_camera_config(self):
         """延迟构造 CameraConfig —— 不是摄像头源时 create_frame_source 会忽略."""
@@ -69,6 +70,7 @@ class PipelineConfig:
             "font_path": self.font_path,
             "camera": dict(self.camera_raw),
             "style_overrides_n": len(self.style_overrides),
+            "mask_style": dict(self.mask_style),
         }
 
 
@@ -115,6 +117,7 @@ def load_pipeline_config(yaml_path: str | Path | None) -> PipelineConfig:
 
     pc.font_path = vz.get("font_path")
     pc.style_overrides = dict(vz.get("style", {}) or {})
+    pc.mask_style = dict(vz.get("mask", {}) or {})
 
     logger.info(f"pipeline 配置加载: {yaml_path}, "
                 f"美化={pc.viz_enabled}, 标签映射={len(pc.label_mapping)}, "

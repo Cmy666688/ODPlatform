@@ -1,0 +1,102 @@
+{
+  "repository": "https://github.com/spiderforest/MixerCSeg",
+  "commit": "7ad3fd6fd0e9bc60d1eb9c3b50292d876485dd1d",
+  "files": {
+    "LICENSE": {
+      "upstream_sha256": "e7d62576226fe965fd57f8fb192c4b1163be9bb92e17304a7f3f6cbaa326aada",
+      "adapted_sha256": "e7d62576226fe965fd57f8fb192c4b1163be9bb92e17304a7f3f6cbaa326aada"
+    },
+    "models/utils.py": {
+      "upstream_sha256": "7f5855b03c276d559bd1a598b81fcf82affb4cb5d7b4ffe44c4732816a320f7e",
+      "adapted_sha256": "bd0250a580fbf3059d21cf326f86411942a6a959ee51f030190836b2a5622402"
+    },
+    "models/layers/hog_edge.py": {
+      "upstream_sha256": "fc9fd40ae70f87046134989329b12da7f527bc0072a019c1f7ae5b879777c6d8",
+      "adapted_sha256": "fc9fd40ae70f87046134989329b12da7f527bc0072a019c1f7ae5b879777c6d8"
+    },
+    "models/layers/__init__.py": {
+      "upstream_sha256": "331cb3387bc5ad9894ce3424d039ae51060a7843501f08c2917bcdd87d788422",
+      "adapted_sha256": "6cd0837cd3ec7e6e100951369f226ba2395c4bd9f79d171b4b37cad156e5e187"
+    },
+    "models/encoder/vss_block.py": {
+      "upstream_sha256": "d00aad8f6d6d34443aabf09c7d185204aef1c4d8bcd5e391f2c37205eb5bf587",
+      "adapted_sha256": "031c0b0032d001fc3ffa7381b199e63b950195412dfad25d1127e3952021c3f8"
+    },
+    "models/encoder/__init__.py": {
+      "upstream_sha256": "23c30149414130086306e56a71e3cbbddc17ec596291bf759a527152cfdedfdb",
+      "adapted_sha256": "769b720792c013c4ce2c8006442c423c6fbb177c03a870fedc0c0d30ba2d7487"
+    },
+    "models/decoder/SRF.py": {
+      "upstream_sha256": "c6798ec41d6434fbfed9a53551be40485dd68f2125c9a0d48053cd206692edb7",
+      "adapted_sha256": "c6798ec41d6434fbfed9a53551be40485dd68f2125c9a0d48053cd206692edb7"
+    },
+    "models/decoder/__init__.py": {
+      "upstream_sha256": "c125585c5bc07a96acd19876073a65c20cb732bdd9cfd5601569c0bca201243c",
+      "adapted_sha256": "6b49408ebaaeae877eff3f5d1fd644a1fc96b8f573c13342bba3be8102d5dfc8"
+    },
+    "models/segmentor/MixerCSeg.py": {
+      "upstream_sha256": "511f9dec06917ee988e09dc975f4df9d5146e641e2ee5f20f698ba6fd56024f7",
+      "adapted_sha256": "30f9caabb5db54f650d779027b689e081e6cf245b3dd6be6c2e1761bcf59245d"
+    },
+    "models/segmentor/__init__.py": {
+      "upstream_sha256": "ec9d201d973be3ceee62d31ea59201fc9bbf03d0ff8da233b51a70563a77386c",
+      "adapted_sha256": "af6c82278d474c4b01cb01422ec0238fc971d50f04d75eb29eb611e10bd47713"
+    },
+    "models/__init__.py": {
+      "upstream_sha256": "305c68ddff4006377c5feb61164cc5fd30ed33f71dd2143e5986c3981d3a529f",
+      "adapted_sha256": "40858701fa72f01c9836a809bd94149af7308d0d8c7a326bda5ba5ff8871c458"
+    },
+    "VMamba/models/utils.py": {
+      "upstream_sha256": "c715201eeed6fad5b7de700a41ffdcd091f717d506120fbdd953e3581f77e103",
+      "adapted_sha256": "a935b81d78a1a43d91536e2dff1cfa750dfc76322179216a3b891d393e5c0927"
+    },
+    "VMamba/models/vmamba.py": {
+      "upstream_sha256": "3a259ceacbd05f8521292c5e0340cef0f02f22912208d4229614fc0347770fcc",
+      "adapted_sha256": "54b7c64d194c49f583400974864b3653a8aa36a3b4dd9226803643bdd26d7697"
+    },
+    "VMamba/models/csms6s.py": {
+      "upstream_sha256": "0a73a10dc8328c697fa155b312105f9accce5e4511db5d5f7b7a3fac71b90b36",
+      "adapted_sha256": "d039864d8a6722dd4606cdb21352ab4cf44c3a9b9c67069b895dd1f935854a44"
+    },
+    "VMamba/models/csm_triton.py": {
+      "upstream_sha256": "6835a3794e41ffbdbfd57d6d5c6c5c2dc8e420e357b5daa22c4ffbc69bb16568",
+      "adapted_sha256": "3f6c08d4c053686ccd579585442988e54b1ad4a1e8336e56483bb9bda660dfb8"
+    }
+  },
+  "adaptations": [
+    "Absolute package imports made relative.",
+    "timm layers import uses current compatibility path.",
+    "Unused mmcv/mmseg checkpoint imports made lazy.",
+    "Unused Mamba2 chunk entry replaced by an explicit unsupported-mode error.",
+    "Cross scan/merge use upstream PyTorch functions without Triton decorators or CPU-incompatible cuda.device context.",
+    "SelectiveScan dispatch checks actual tensor device and availability of the explicitly requested CUDA backend."
+  ],
+  "training_source": {
+    "path": "main.py",
+    "sha256": "275ccc659521323c9ee842576c16806d23a836762890ebce4f0348e7827d229c",
+    "defaults": {
+      "--BCELoss_ratio": 0.87,
+      "--DiceLoss_ratio": 0.13,
+      "--Norm_Type": "GN",
+      "--dataset_path": "/home/linux/code/sod/dataset/CrackMap",
+      "--batch_size_train": 1,
+      "--batch_size_test": 1,
+      "--lr_scheduler": "PolyLR",
+      "--lr": 0.0005,
+      "--min_lr": 1e-06,
+      "--weight_decay": 0.01,
+      "--epochs": 50,
+      "--start_epoch": 0,
+      "--lr_drop": 30,
+      "--output_dir": "./checkpoints/weights",
+      "--device": "cuda",
+      "--seed": 42,
+      "--dataset_mode": "crack",
+      "--num_threads": 1,
+      "--phase": "train",
+      "--load_width": 512,
+      "--load_height": 512
+    }
+  },
+  "adapted_hash_policy": "UTF-8 with LF line endings"
+}
