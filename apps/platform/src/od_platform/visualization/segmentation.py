@@ -41,7 +41,7 @@ class MaskVisualizer:
             raise ValueError("image 必须是 HxWx3 uint8 BGR 图像")
         self._validate_probabilities(probabilities, image.shape[:2])
         mask = probabilities >= self.style.threshold
-        output = image.copy()
+        output: np.ndarray = image.copy()
         color = np.asarray(to_bgr_tuple(self.style.color), dtype=np.float32)
         output[mask] = np.rint((1 - self.style.alpha) * output[mask] + self.style.alpha * color).astype(np.uint8)
         if self.style.contour_thickness and mask.any():

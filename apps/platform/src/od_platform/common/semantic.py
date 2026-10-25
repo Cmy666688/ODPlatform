@@ -33,7 +33,8 @@ def read_bgr(path: Path) -> np.ndarray:
     if image.ndim == 2:
         return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     if image.ndim == 3 and image.shape[2] in (3, 4):
-        return image[..., :3].copy()             # 显式去 alpha,不把透明度当输入通道
+        color_image: np.ndarray = image[..., :3].copy()  # 显式去 alpha,不把透明度当输入通道
+        return color_image
     raise ValueError(f"不支持的图像通道: {path}: {image.shape}")
 
 
