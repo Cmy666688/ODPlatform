@@ -75,7 +75,7 @@ class JobStore:
                 try:
                     process = subprocess.Popen([sys.executable, "-m", "od_web.worker", "--job-dir", str(directory)],
                                                cwd=paths.ROOT_DIR, env=environment, stdout=log, stderr=log,
-                                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 except OSError as e:
                     state.update(status="failed", error=str(e)); write_json(directory / "status.json", state)
                     raise
