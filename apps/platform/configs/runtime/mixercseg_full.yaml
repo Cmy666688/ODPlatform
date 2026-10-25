@@ -1,0 +1,19 @@
+# 完整训练:原始 50 epochs / 512x512 / batch=1 / seed=42,不限样本。
+# GPU 就绪后启动;CPU JIT 是可选执行优化,不用于自动回退启动完整训练。
+backend: mixercseg
+data: crackmap
+device: auto
+model: null
+scan_backend: reference
+epochs: 50
+batch_size_train: 1
+batch_size_test: 1
+lr: 0.0005
+min_lr: 0.000001
+weight_decay: 0.01
+BCELoss_ratio: 0.87
+DiceLoss_ratio: 0.13
+seed: 42
+num_threads: 1
+torch_threads: 4
+experiment_name: crackmap-full-acceptance

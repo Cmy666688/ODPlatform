@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#147d68">
+  <title>ODPlatform · 训练工作台</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-mark">OD</span><span>ODPlatform<small>视觉算法工作台</small></span></a>
+    <div class="workspace-label">工作空间</div>
+    <nav aria-label="主导航">
+      <a href="#overview" data-page="overview" class="nav-link active"><span class="nav-icon">◫</span>监控概览</a>
+      <a href="#data" data-page="data" class="nav-link"><span class="nav-icon">▤</span>数据质检<span id="data-dot" class="nav-dot"></span></a>
+      <a href="#experiments" data-page="experiments" class="nav-link"><span class="nav-icon">⌁</span>实验记录</a>
+      <a href="#results" data-page="results" class="nav-link"><span class="nav-icon">▧</span>结果可视化</a>
+    </nav>
+    <div class="sidebar-note"><span class="tiny-label">当前项目</span><strong>裂缝语义分割</strong><span>MixerCSeg / CrackMap</span></div>
+    <footer class="sidebar-footer"><span class="connection-dot" id="connection-dot"></span><span id="connection-text">正在连接服务</span><small>本地工作区</small></footer>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar"><div class="breadcrumb">工作空间<span>/</span><strong id="breadcrumb-title">监控概览</strong></div><div class="topbar-right"><span class="live-pill"><span></span>实时同步</span><button class="icon-button" id="refresh" aria-label="刷新数据" title="刷新数据">↻</button></div></header>
+    <main>
+      <section id="page-overview" class="page">
+        <div class="page-heading"><div><div class="eyebrow">EXPERIMENT OVERVIEW</div><h1>训练监控</h1><p>从数据准备到效果验收，掌握实验的每一步。</p></div><button class="button primary" data-open-config><span>＋</span> 训练配置</button></div>
+        <div class="dataset-strip"><div><span class="dataset-symbol">▤</span><strong>CrackMap</strong><span class="badge neutral">二值语义分割</span></div><div id="dataset-counts">正在读取数据集…</div><span class="strip-model">MixerCSeg <span>·</span> 512 × 512</span></div>
+        <div class="monitor-title"><div><span id="training-dot" class="status-dot"></span><strong id="training-name">等待新实验</strong><span id="training-status" class="badge neutral">待训练</span></div><select id="monitor-job" aria-label="选择监控任务"><option value="">新实验 / 待启动</option></select></div>
+        <div class="metrics-grid">
+          <article class="metric-card"><span>完成轮次</span><strong id="metric-epoch">— <small>/ 50</small></strong><div id="metric-epoch-note">完整训练</div></article>
+          <article class="metric-card"><span>训练损失</span><strong id="metric-loss">—</strong><div>每轮平均损失</div></article>
+          <article class="metric-card"><span>验证集 F1</span><strong id="metric-f1">—</strong><div>固定阈值 0.5</div></article>
+          <article class="metric-card"><span>运行时长</span><strong id="metric-time">—</strong><div id="metric-eta">启动后显示预计剩余时间</div></article>
+        </div>
+        <div class="monitor-grid">
+          <article class="card chart-card"><div class="card-heading"><div><h2>训练趋势</h2><p>训练与验证的真实指标</p></div><div class="segmented"><button class="selected" data-chart="loss">损失</button><button data-chart="metrics">验证指标</button></div></div><div id="chart-legend" class="legend"></div><div id="training-chart" class="chart"></div><div class="chart-foot"><span>横轴 · Epoch</span><span id="chart-update">等待训练开始</span></div></article>
+          <article class="card resource-card"><div class="card-heading"><h2>运行环境</h2><span class="badge neutral" id="gpu-badge">检测中</span></div><div class="device-box"><span class="device-icon">▥</span><div><strong id="device-name">正在检测设备</strong><small id="device-note">读取计算环境</small></div></div><div class="resource-row"><span>CPU 使用率</span><strong id="cpu-value">—</strong></div><div class="meter"><i id="cpu-meter"></i></div><div class="resource-row"><span>内存使用</span><strong id="memory-value">—</strong></div><div class="meter memory"><i id="memory-meter"></i></div><div class="resource-caption" id="memory-caption">—</div><div id="gpu-resources" hidden style="margin-top:16px"><div class="resource-row"><span>GPU 使用率</span><strong id="gpu-utilization">—</strong></div><div class="resource-row"><span>显存</span><strong id="gpu-memory">—</strong></div></div><div class="environment-message" id="environment-message">正在检查训练环境…</div></article>
+        </div>
+        <article class="card progress-card"><div class="card-heading"><h2>实验进程</h2><span id="progress-label">0%</span></div><div class="progress-track"><i id="progress-bar"></i></div><div class="steps"><div id="step-data"><b>1</b><span>数据就绪<small>接入与质量检查</small></span></div><div id="step-train"><b>2</b><span>完整训练<small>50 epochs</small></span></div><div id="step-test"><b>3</b><span>独立测试<small>24 张测试图</small></span></div><div id="step-results"><b>4</b><span>效果验收<small>指标与结果可视化</small></span></div></div><div id="batch-progress" class="batch-note">训练尚未启动。GPU 就绪后可提交完整实验。</div></article>
+        <div class="bottom-grid"><article class="card"><div class="card-heading"><h2>最近实验</h2><a href="#experiments" class="text-link">查看全部 →</a></div><div id="recent-jobs"></div></article><article class="card quality-summary"><div class="card-heading"><h2>数据质量</h2><span id="quality-badge" class="badge neutral">未检查</span></div><div id="quality-summary"></div><a href="#data" class="text-link">查看检查详情 →</a></article></div>
+      </section>
+      <section id="page-data" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">DATA QUALITY</div><h1>数据质检</h1><p>检查配对、像素格式与数据身份，保留每一条风险提示。</p></div><button id="validate-data" class="button primary">重新质检</button></div>
+        <div class="metrics-grid" id="data-metrics"></div><article class="card"><div class="card-heading"><h2>检查结果</h2><span class="caption">原始数据保持不变</span></div><div id="quality-checks"></div></article><article class="card" style="margin-top:24px"><div class="card-heading"><h2>潜在同源分组</h2><span class="badge warning">待确认</span></div><p class="body-copy">同前缀文件跨集合仅代表风险线索。需要结合原图或视频采集记录确认，不能仅凭文件名判定泄漏。</p><div id="source-groups" class="group-list"></div></article>
+      </section>
+      <section id="page-experiments" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">EXPERIMENTS</div><h1>实验记录</h1><p>任务在后台独立运行，关闭页面后仍会继续。</p></div><button class="button primary" data-open-config>＋ 训练配置</button></div>
+        <article class="card"><div class="card-heading"><h2>全部任务</h2><span id="job-count" class="caption">0 个任务</span></div><div id="all-jobs"></div></article><article id="job-detail" class="card" style="margin-top:24px" hidden></article>
+      </section>
+      <section id="page-results" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">VISUAL RESULTS</div><h1>结果可视化</h1><p>查看分割掩膜、像素误差和独立测试集指标。</p></div><span class="badge neutral" id="result-panel-label">原图 · GT · 预测 · 误差</span></div>
+        <div class="results-grid"><article class="card"><div class="card-heading"><h2>图片推理</h2><span class="caption">PNG / JPG · 最大 20 MB</span></div><label class="upload-zone" id="upload-zone" for="image-upload"><span class="upload-icon">↥</span><strong>拖入图片，或点击上传</strong><small id="upload-description">使用已就绪的权重查看裂缝分割效果</small><input id="image-upload" type="file" accept="image/png,image/jpeg,image/bmp" hidden></label><div class="infer-controls"><label>模型<select id="infer-model"><option value="official">官方 CrackMap 参考权重</option></select></label><label>前景阈值 <strong id="threshold-value">0.50</strong><input id="infer-threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.5"></label><button class="button primary" id="run-inference" disabled>开始推理</button></div><div id="infer-feedback" class="caption" aria-live="polite"></div></article><article class="card result-note"><span class="eyebrow">EVALUATION</span><h2>让效果有据可查</h2><p>完整训练结束后，自动使用验证集选出的最佳权重，在独立测试集上计算 F1、前景 IoU、精确率和召回率。</p><div class="result-key"><span class="key green"></span>正确前景 TP<span class="key red"></span>误检 FP<span class="key blue"></span>漏检 FN</div><p class="caption">已有官方权重结果标记为“参考结果”，与本次完整训练产物分别展示。</p></article></div>
+        <article class="card gallery-card"><div class="card-heading"><div><h2>结果浏览</h2><p id="gallery-description">选择结果来源</p></div><select id="result-source" aria-label="结果来源"><option value="reference">官方权重参考结果</option></select></div><div id="evaluation-metrics" class="evaluation-metrics"></div><div id="gallery-tools" class="gallery-tools" hidden><label>图片<select id="gallery-image" aria-label="选择结果图片"></select></label><a id="download-result" class="button secondary" download>下载当前图片</a></div><div id="gallery-preview" class="gallery-preview"><div class="empty"><strong>暂无结果</strong><span>训练验收或图片推理完成后，结果会显示在这里。</span></div></div><div id="gallery-thumbnails" class="thumbnails"></div><div id="result-downloads" class="download-links"></div></article>
+      </section>
+    </main>
+    <footer class="page-footer"><span>ODPlatform</span><span>MixerCSeg 裂缝语义分割工作台</span></footer>
+  </div>
+  <dialog id="config-dialog"><form id="training-form"><div class="dialog-heading"><div><span class="eyebrow">NEW EXPERIMENT</span><h2>完整训练配置</h2></div><button type="button" class="icon-button" id="close-config" aria-label="关闭配置">×</button></div><p class="body-copy">保留原始模型配方，完成训练后自动进行独立测试和结果可视化。</p><label class="form-label">实验名称<input name="name" value="CrackMap 完整实验" maxlength="80" required></label><div class="form-grid"><label>训练轮次<input name="epochs" type="number" value="50" min="1" max="1000" required></label><label>训练批大小<input name="batch_size_train" type="number" value="1" min="1" max="64" required></label><label>学习率<input name="lr" type="number" value="0.0005" min="0.000002" max="1" step="any" required></label><label>随机种子<input name="seed" type="number" value="42" step="1" required></label></div><div class="recipe-summary"><span>AdamW + PolyLR</span><span>512 × 512</span><span>BCE 0.87 / Dice 0.13</span><span>HOG bins 36</span></div><label class="form-label">F1 验收目标（可选）<input name="min_f1" type="number" min="0" max="1" step="0.01" placeholder="留空时报告实际效果，由人工评审"></label><div id="config-readiness" class="environment-message">检测计算环境</div><div class="dialog-actions"><button type="button" id="save-draft" class="button secondary">保存配置</button><button type="submit" class="button primary" id="start-training" disabled>GPU 就绪后开始训练</button></div></form></dialog>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

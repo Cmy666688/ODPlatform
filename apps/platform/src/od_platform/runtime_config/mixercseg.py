@@ -40,6 +40,7 @@ class MixerCSegConfig(BaseModel):
     load_width: Literal[512] = 512
     load_height: Literal[512] = 512
     torch_threads: int = Field(default=4, ge=1)
+    scan_backend: Literal["reference", "cpu_jit"] = "reference"
     experiment_name: str = "mixercseg-crackmap"
     threshold: float = Field(default=0.5, gt=0, lt=1)
     max_train_batches: Optional[int] = Field(default=None, ge=1)

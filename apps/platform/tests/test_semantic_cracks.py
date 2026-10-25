@@ -125,3 +125,43 @@ def test_training_audit_marks_smoke_and_selects_only_validation(semantic_workspa
     assert audit["smoke"] is True and audit["model_selection_split"] == "val"
     assert audit["history"][0]["train_samples"] == 1
     assert result.best_weight.exists()
+
+
+def test_training_cancellation_preserves_audit_and_progress(semantic_workspace, monkeypatch):
+    pytest.importorskip("mmengine")
+    import torch
+    from od_platform.backends.mixercseg import model as model_mod
+    from od_platform.training.mixercseg_service import train_mixercseg
+    yaml_path = prepare_cracks(semantic_workspace)
+    monkeypatch.setattr(model_mod, "build_model", lambda *a, **kw: (torch.nn.Conv2d(3, 1, 1), torch.nn.BCEWithLogitsLoss(), "cpu"))
+    events = []
+    with RunContext("training") as run:
+        result = train_mixercseg(MixerCSegConfig(epochs=2, num_threads=0), yaml_path, run,
+                                archive=False, on_progress=events.append, should_cancel=lambda: True)
+    assert not result.success
+    audit = json.loads((result.save_dir / "odp_audit.json").read_text(encoding="utf-8"))
+    assert audit["cancelled"] is True and audit["history"] == []
+    assert events[0]["phase"] == "validating"
+    assert (result.save_dir / "progress.json").exists()
+
+
+def test_acceptance_uses_only_test_and_reports_unset_quality_target(semantic_workspace, monkeypatch):
+    import torch
+    from od_platform.backends.mixercseg import model as model_mod
+    from od_platform.training.acceptance import evaluate_checkpoint
+    yaml_path = prepare_cracks(semantic_workspace)
+    calls = []
+    class TinyModel(torch.nn.Module):
+        def forward(self, inputs):
+            calls.append(len(inputs))
+            return torch.ones((len(inputs), 1, 512, 512))
+    monkeypatch.setattr(model_mod, "build_model", lambda *a, **kw: (TinyModel(), None, "cpu"))
+    checkpoint = semantic_workspace.parent / "best.pth"; checkpoint.write_bytes(b"test fixture")
+    output = semantic_workspace.parent / "evaluation"
+    report = evaluate_checkpoint(MixerCSegConfig(), yaml_path, checkpoint, output)
+    assert report["split"] == "test" and report["images"] == 1 and calls == [1]
+    assert report["quality_status"] == "needs_review"
+    assert report["confusion"] == {"tp": 32, "fp": 224, "fn": 0, "tn": 0}
+    assert report["metrics"]["F1"] > report["empty_baseline"]["F1"]
+    assert len(list((output / "comparisons").glob("*.png"))) == 1
+    assert (output / "per_image.csv").exists()

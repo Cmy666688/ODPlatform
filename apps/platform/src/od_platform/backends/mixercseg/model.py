@@ -51,6 +51,14 @@ def build_model(config: MixerCSegConfig, *, checkpoint: str | None = None):
         raise RuntimeError('缺少 MixerCSeg 依赖,请安装 pip install -e "./apps/platform[mixercseg]"') from e
     device = resolve_device(config.device)
     torch.set_num_threads(config.torch_threads)
+    if config.scan_backend == "cpu_jit":
+        if device != "cpu":
+            raise ValueError("scan_backend=cpu_jit 必须使用 CPU")
+        from .cpu_scan import configure_cpu_scan
+        configure_cpu_scan(True)
+    else:
+        from ._vendor.VMamba.models import csms6s, vmamba
+        vmamba.selective_scan_fn = csms6s.selective_scan_fn
     args = Namespace(**config.model_dump())
     args.device = device
     model, criterion = build_MixerCSeg(args)

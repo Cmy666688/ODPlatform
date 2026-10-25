@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            python: '3.10'
+            python: '3.11'
           - os: windows-latest
             python: '3.13'
     runs-on: ${{ matrix.os }}
@@ -37,8 +37,12 @@ jobs:
       - name: Install CPU PyTorch for checks
         run: python -m pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Install project and check tools
-        run: python -m pip install -e "./apps/platform[dev,desktop,mixercseg]"
+        run: |
+          python -m pip install -e "./apps/platform[dev,desktop,mixercseg,cpu]"
+          python -m pip install -e "./apps/web-backend[workbench]"
       - name: Check source and run isolated tests
         run: python scripts/check_project.py
       - name: Build installable package
-        run: python -m build apps/platform
+        run: |
+          python -m build apps/platform
+          python -m build apps/web-backend

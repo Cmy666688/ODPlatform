@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "od-web"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["od-platform", "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "python-multipart>=0.0.20", "httpx>=0.27,<1", "nvidia-ml-py>=12,<14"]
+
+[project.optional-dependencies]
+workbench = ["streamlit>=1.66,<2"]
+
+[project.scripts]
+odp-web = "od_web.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/od_web"]

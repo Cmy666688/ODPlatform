@@ -14,7 +14,8 @@ odp-train --backend mixercseg --config mixercseg_train
 ```
 
 - `apps/platform/` — 核心引擎（数据转换、训练、推理）
-- `apps/web-backend/` — Web 后端服务（占位，V1.1）
+- `apps/web-backend/` — FastAPI 服务与训练监控面板
+- `apps/streamlit/` — 复用 API 的算法调试工作台
 - `apps/desktop/` — PySide6 桌面推理示例（可选）
 - `data/` — 数据集（共享，gitignored）
 - `models/` — 模型权重（共享，gitignored）
@@ -50,3 +51,14 @@ python -m apps.desktop.main
 
 桌面用法及线程收尾说明见 [apps/desktop/README.md](apps/desktop/README.md)。
 开发检查与 CI 说明见 [docs/development.md](docs/development.md)。
+
+Web 监控与结果可视化：
+
+```powershell
+pip install -e "./apps/platform[mixercseg,cpu]"
+pip install -e "./apps/web-backend[workbench]"
+powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
+```
+
+面板打开 <http://127.0.0.1:8000>。完整训练等待 GPU，不会因页面刷新或保存配置而启动。
+功能、任务接口和验收边界见 [Web 使用说明](apps/web-backend/README.md)。

@@ -132,6 +132,22 @@ python -m apps.desktop.main
 
 模型权重、数据集和运行结果均被 Git 忽略，不上传私有仓库。
 
+## Web 监控与待 GPU 完整实验
+
+完整配置 `mixercseg_full.yaml` 保留 50 epochs、512×512、batch=1 和原始优化配方。
+当前完整训练等待 GPU，不会由页面保存配置或刷新自动启动。
+Web 端的 CUDA 门禁也不会自动回退到 CPU 执行完整训练。
+
+监控和训练后的自动验收见 [Web 使用说明](../apps/web-backend/README.md)。
+训练过程中每批原子写入进度、逐轮保存权重；正常结束后使用 best 权重在独立 test 集
+按原图尺寸统计混淆矩阵、F1、前景 IoU、mIoU、precision 和 recall，并输出逐图 CSV、
+损失曲线和掩膜对比图。固定阈值，不用 test 集选择权重或调整阈值。
+
+新增可选 `cpu` extra 与 `scan_backend: cpu_jit`。它仅用 Numba 编译相同的逐步递推
+和解析梯度，未开启 fastmath；前向和所有可训练输入梯度已与上游参考实现对齐测试。
+默认训练继续使用 `reference` 配置，由上游分派器选择 CUDA 扩展；CPU JIT 用于本机
+无 CUDA 时的单图推理验证，不改变上游 vendored 源码。
+
 从本平台新训练的 36-bin 权重推理时，使用对应训练配置：
 
 ```bash

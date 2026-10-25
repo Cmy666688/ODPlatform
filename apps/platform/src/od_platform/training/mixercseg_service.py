@@ -12,17 +12,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-import json
 import logging
 import random
 import shutil
 import time
-from typing import Any
+from typing import Any, Callable, Optional
 
 import numpy as np
 
 from od_platform.common import paths
 from od_platform.common.run_context import RunContext
+from od_platform.common.json_io import write_json
 from od_platform.common.semantic import load_semantic_dataset
 from od_platform.data_validation.semantic import validate_semantic_dataset
 from od_platform.runtime_config.mixercseg import MixerCSegConfig, UPSTREAM_COMMIT
@@ -63,7 +63,8 @@ def evaluate_model(model, criterion, loader, device: str, threshold: float, max_
 
 
 def train_mixercseg(config: MixerCSegConfig, data_yaml: Path, run: RunContext,
-                    *, archive=True) -> MixerTrainResult:
+                    *, archive=True, on_progress: Optional[Callable[[dict], None]] = None,
+                    should_cancel: Optional[Callable[[], bool]] = None) -> MixerTrainResult:
     import torch
     from torch.utils.data import DataLoader
     from od_platform.backends.mixercseg.data import CrackMaskDataset
@@ -74,7 +75,13 @@ def train_mixercseg(config: MixerCSegConfig, data_yaml: Path, run: RunContext,
              "upstream_commit": UPSTREAM_COMMIT, "config": config.model_dump(),
              "smoke": config.max_train_batches is not None or config.max_eval_batches is not None,
              "model_selection_split": "val", "history": [], "success": False}
+    def emit(event):
+        write_json(run.artifact_path("progress.json"), event)
+        if on_progress is not None:
+            on_progress(event)
+    write_json(audit_path, audit)
     try:
+        emit({"phase": "validating", "epoch": 0, "epochs": config.epochs})
         report = validate_semantic_dataset(data_yaml)
         audit["validation"] = report.to_dict()
         if report.overall_severity == "ERROR":
@@ -99,11 +106,14 @@ def train_mixercseg(config: MixerCSegConfig, data_yaml: Path, run: RunContext,
         best_score = -1.0
         weights = run.artifact_path("weights", "last.pth")
         best_path = weights.with_name("best.pth")
+        write_json(audit_path, audit)
         for epoch in range(config.epochs):
             model.train()
             losses = []; samples = 0; start = time.perf_counter()
             learning_rate = float(optimizer.param_groups[0]["lr"])
             for index, batch in enumerate(train_loader):
+                if should_cancel is not None and should_cancel():
+                    raise InterruptedError("用户请求停止训练;已完成 epoch 的 checkpoint 保留")
                 if config.max_train_batches is not None and index >= config.max_train_batches:
                     break
                 inputs, target = batch["image"].to(device), batch["label"].to(device)
@@ -113,9 +123,16 @@ def train_mixercseg(config: MixerCSegConfig, data_yaml: Path, run: RunContext,
                     raise RuntimeError("训练损失不是有限数")
                 loss.backward(); optimizer.step()
                 losses.append(float(loss.item())); samples += len(inputs)
+                emit({"phase": "training", "epoch": epoch + 1, "epochs": config.epochs,
+                      "batch": index + 1, "batches": len(train_loader), "samples": samples,
+                      "loss": float(np.mean(losses)), "lr": learning_rate,
+                      "epoch_seconds": time.perf_counter() - start,
+                      "history": audit["history"]})
             if not losses:
                 raise RuntimeError("训练没有读取任何样本")
             scheduler.step()
+            emit({"phase": "validating_epoch", "epoch": epoch + 1, "epochs": config.epochs,
+                  "history": audit["history"]})
             validation = evaluate_model(model, criterion, val_loader, device, config.threshold,
                                         config.max_eval_batches)
             record = {"epoch": epoch + 1, "lr": learning_rate, "train_loss": float(np.mean(losses)),
@@ -130,7 +147,9 @@ def train_mixercseg(config: MixerCSegConfig, data_yaml: Path, run: RunContext,
             torch.save(checkpoint, weights)
             if validation["mIoU"] > best_score:
                 best_score = validation["mIoU"]; shutil.copy2(weights, best_path)
-            audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json(audit_path, audit)
+            emit({"phase": "epoch_complete", "epoch": epoch + 1, "epochs": config.epochs,
+                  "history": audit["history"]})
         destination = best_path
         if archive:
             paths.TRAINED_MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -139,10 +158,11 @@ def train_mixercseg(config: MixerCSegConfig, data_yaml: Path, run: RunContext,
             shutil.copy2(best_path, destination)
         audit["success"] = True
         audit["best_weight"] = str(destination)
-        audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json(audit_path, audit)
         return MixerTrainResult(True, run.run_id, run.run_dir, destination)
     except (Exception, KeyboardInterrupt) as e:
         logger.exception("MixerCSeg 训练失败或被中断: %s", e)
         audit["error"] = str(e) or type(e).__name__
-        audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        audit["cancelled"] = isinstance(e, (InterruptedError, KeyboardInterrupt))
+        write_json(audit_path, audit)
         return MixerTrainResult(False, run.run_id, run.run_dir, message=audit["error"])

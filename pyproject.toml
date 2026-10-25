@@ -48,7 +48,7 @@ warn_return_any = true
 warn_unused_ignores = true
 no_implicit_optional = true
 explicit_package_bases = true
-mypy_path = ["apps/platform/src"]
+mypy_path = ["apps/platform/src", "apps/web-backend/src"]
 exclude = ["backends/mixercseg/_vendor/"]
 
 [[tool.mypy.overrides]]
@@ -57,7 +57,7 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["od_platform.backends.mixercseg._vendor.*", "timm.*", "fvcore.*", "mmengine.*", "gdown.*"]
+module = ["od_platform.backends.mixercseg._vendor.*", "timm.*", "fvcore.*", "mmengine.*", "gdown.*", "numba.*", "streamlit.*", "pandas.*", "matplotlib.*", "pynvml.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

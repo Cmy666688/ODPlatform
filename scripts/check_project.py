@@ -31,7 +31,7 @@ def _copy_test_workspace(target: Path) -> None:
     for name in (".odp-workspace", "pyproject.toml"):
         shutil.copy2(ROOT_DIR / name, target / name)
     for name in ("apps/platform/src", "apps/platform/tests", "apps/platform/configs/runtime",
-                 "apps/desktop", "scripts", "tests"):
+                 "apps/desktop", "apps/web-backend/src", "apps/streamlit", "scripts", "tests"):
         source = ROOT_DIR / name
         if source.exists():
             shutil.copytree(source, target / name, ignore=ignore)
@@ -41,13 +41,14 @@ def main() -> int:
     env = dict(os.environ, PYTHONUTF8="1", QT_QPA_PLATFORM="offscreen")
     try:
         _run(["-m", "ruff", "check", "."], cwd=ROOT_DIR, env=env)
-        _run(["-m", "mypy", "apps/platform/src", "apps/desktop", "scripts/check_project.py"],
+        _run(["-m", "mypy", "apps/platform/src", "apps/desktop", "apps/web-backend/src", "apps/streamlit", "scripts/check_project.py"],
              cwd=ROOT_DIR, env=env)
         with tempfile.TemporaryDirectory(prefix="odp-check-") as temp:
             workspace = Path(temp)
             _copy_test_workspace(workspace)
             # 子进程优先导入临时副本,避免 editable 安装指回真实 workspace。
             env["PYTHONPATH"] = os.pathsep.join([str(workspace / "apps/platform/src"),
+                                               str(workspace / "apps/web-backend/src"),
                                                str(workspace)])
             _run(["scripts/demo_data/make_demo.py"], cwd=workspace, env=env)
             _run(["scripts/demo_data/make_broken_demo.py"], cwd=workspace, env=env)
