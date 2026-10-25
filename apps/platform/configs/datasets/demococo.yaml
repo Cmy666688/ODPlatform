@@ -1,0 +1,28 @@
+path: C:/Users/cmy/ODPlatform/data/processed/demococo
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: head
+  1: 反光衣
+nc: 2
+odp_meta:
+  schema_version: 1
+  dataset_name: demococo
+  source_format: coco
+  task: segment
+  tool_version: odp-transform/0.4
+  created_at: '2026-10-23T08:24:51'
+  contract_fingerprint: 847ab754c3a21da8455ae0d6ec7e415861ded860d5ed8441f42785570df5f231
+  manifest_path: runs/data_pipeline/20261023-082451-2/manifest.json
+  split:
+    strategy: random
+    seed: 42
+    rates:
+      train: 0.8
+      val: 0.1
+      test: 0.1
+    counts:
+      train: 6
+      val: 1
+      test: 1

@@ -23,7 +23,7 @@ def _sha256(path: Path) -> str:
 @check(_NAME)
 def validate_manifest_lineage(ctx: CheckContext) -> CheckResult:
     manifest, err, _ = load_manifest_from_yaml(ctx.snapshot.yaml_data)
-    if err:
+    if err or manifest is None:
         return CheckResult(_NAME, CheckSeverity.ERROR, f"拿不到 D3 划分契约: {err}", {})
     snap = ctx.snapshot
 
@@ -39,14 +39,14 @@ def validate_manifest_lineage(ctx: CheckContext) -> CheckResult:
     moved: List[dict] = []
     missing: List[str] = []
     for s in manifest.samples:
-        lbl = disk.get((s.split, s.stem))
-        if lbl is None:
+        label_path = disk.get((s.split, s.stem))
+        if label_path is None:
             elsewhere = disk_splits_of_stem.get(s.stem)
             if elsewhere:
                 moved.append({"stem": s.stem, "expect": s.split, "actual": sorted(elsewhere)})
             else:
                 missing.append(s.stem)
-        elif _sha256(lbl) != s.sha256:
+        elif _sha256(label_path) != s.sha256:
             changed.append(s.stem)
 
     details = {"n_samples": len(manifest.samples),

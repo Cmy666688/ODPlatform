@@ -76,3 +76,18 @@ def test_coverage_gate_rejects_broken():
     pipe = DatasetPipeline("broken", AnnotationFormat.PASCAL_VOC)
     with pytest.raises(ValueError, match="覆盖率"):
         pipe.run()
+
+
+@pytest.mark.parametrize("body, missing", [
+    ("<annotation/>", "size"),
+    ("<annotation><size><width>640</width><height>480</height></size>"
+     "<object><name>head</name></object></annotation>", "bndbox"),
+])
+def test_voc_missing_nodes_name_the_bad_file(tmp_path, body, missing):
+    from od_platform.data_pipeline.convert.converters.pascal_voc import convert_pascal_voc
+    from od_platform.data_pipeline.convert.registry import ConvertOptions
+    annotations = tmp_path / "annotations"
+    annotations.mkdir()
+    (annotations / "broken.xml").write_text(body, encoding="utf-8")
+    with pytest.raises(ValueError, match=f"broken.xml.*{missing}"):
+        convert_pascal_voc(annotations, tmp_path / "labels", ConvertOptions())

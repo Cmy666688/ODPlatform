@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from argparse import Namespace
-from pathlib  import Path
 
 import pytest
 
@@ -119,7 +118,7 @@ class TestYAMLLoaderPathResolution:
         assert loader._resolve_path(f).resolve() == f.resolve()
 
     def test_relative_path_uses_config_dir(self, write_yaml, tmp_path):
-        f = write_yaml("epochs: 50", name="train.yaml")
+        write_yaml("epochs: 50", name="train.yaml")
         loader = YAMLLoader(config_dir=tmp_path)
         cfg = loader.load("train.yaml")     # 文件名 → 从 tmp_path 找
         assert cfg["epochs"] == 50

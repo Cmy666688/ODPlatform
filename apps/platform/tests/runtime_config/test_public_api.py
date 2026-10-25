@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 
 from argparse import Namespace
-import pytest
 
 import od_platform.runtime_config as rc
 

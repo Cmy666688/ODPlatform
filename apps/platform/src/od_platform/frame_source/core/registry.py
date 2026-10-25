@@ -97,7 +97,7 @@ def register_source(
             )
 
         _BY_CONFIG[config_cls] = source_cls
-        if str_matcher is not None:
+        if str_matcher is not None and str_to_config is not None:
             _STR_RULES.append(StrRule(source_cls.__name__, str_matcher, str_to_config))
 
         logger.debug(

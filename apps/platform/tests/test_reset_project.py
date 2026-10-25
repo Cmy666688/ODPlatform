@@ -14,6 +14,7 @@
 # tmp_path,绝不对真实项目目录做任何删除。
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -287,3 +288,25 @@ class TestAuditContext:
         assert ctx["user"]
         assert isinstance(ctx["pid"], int)
         assert ctx["git_rev"]  # 本仓库在 git 管理下,应能取到 rev
+
+
+@pytest.mark.parametrize("version, callback", [((3, 10), "onerror"), ((3, 13), "onexc")])
+def test_delete_one_adapts_callback_to_python_version(tmp_path, monkeypatch, version, callback):
+    """两种 Python 回调形态都交给同一个只读文件处理器,不实际删除。"""
+    target = tmp_path / "fake_runs"
+    target.mkdir()
+    seen = []
+    error = PermissionError("read-only")
+    def operation(name): return None
+    def fake_rmtree(path, **kwargs):
+        assert path == target
+        assert set(kwargs) == {callback}
+        detail = (PermissionError, error, None) if callback == "onerror" else error
+        kwargs[callback](operation, str(path), detail)
+    monkeypatch.setattr(rp, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(rp, "sys", SimpleNamespace(version_info=version))
+    monkeypatch.setattr(rp.shutil, "rmtree", fake_rmtree)
+    monkeypatch.setattr(rp, "_on_rm_error", lambda func, name, exc: seen.append((func, name, exc)))
+    monkeypatch.setattr(rp, "_restore_git_tracked", lambda rel: None)
+    assert rp._delete_one(target, 1, 1, 0, 0) is None
+    assert seen == [(operation, str(target), error)]

@@ -35,7 +35,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Type, Union
 
-from pydantic import BaseModel
+from od_platform.runtime_config.base import BaseConfig
 
 from od_platform.common.paths import runtime_config_path
 from od_platform.runtime_config.registry import CONFIG_REGISTRY
@@ -66,7 +66,7 @@ class ConfigGenerator:
 
     def generate(
         self,
-        config_class: Type[BaseModel],
+        config_class: Type[BaseConfig],
         output_path: Union[str, Path],
         *,
         overwrite: bool = False,
@@ -121,7 +121,7 @@ class ConfigGenerator:
 
     def _generate_yaml(
         self,
-        config_class: Type[BaseModel],
+        config_class: Type[BaseConfig],
         title: Optional[str] = None,
     ) -> str:
         """生成完整 YAML 内容(头部 + 字段分组 + 尾部 FAQ)"""
@@ -174,7 +174,7 @@ class ConfigGenerator:
 
     def _generate_field(
         self,
-        config: BaseModel,
+        config: BaseConfig,
         field_name: str,
     ) -> List[str]:
         """生成单个字段的 YAML 内容(含注释 + 值)"""

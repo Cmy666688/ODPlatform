@@ -396,7 +396,7 @@ class ConfigMerger:
                 # 无溯源可附(嵌套模型 / 跨字段错误): 原样重建, 保留原 type
                 line_errors.append(InitErrorDetails(
                     type=err["type"], loc=err.get("loc", ()),
-                    input=err.get("input"), ctx=err.get("ctx"),
+                    input=err.get("input"), ctx=err.get("ctx", {}),
                 ))
                 continue
             msg = f"{err.get('msg', '')} [来源: {meta.chain_str()}]"
@@ -416,9 +416,10 @@ class ConfigMerger:
         """判断字段是否标了 sensitive=True."""
         if self._last_config_class is None:
             return False
-        if not hasattr(self._last_config_class, "sensitive_field_names"):
+        sensitive_fields = getattr(self._last_config_class, "sensitive_field_names", None)
+        if not callable(sensitive_fields):
             return False
-        return key in self._last_config_class.sensitive_field_names()
+        return key in sensitive_fields()
 
     def _display_value(self, key: str, value: Any) -> Any:
         """获取展示值 (sensitive 字段自动 mask 成 SENSITIVE_MASK)."""

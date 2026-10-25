@@ -12,9 +12,9 @@ odp_meta:
   source_format: pascal_voc
   task: detect
   tool_version: odp-transform/0.4
-  created_at: '2026-10-23T08:31:26'
+  created_at: '2026-10-23T09:17:01'
   contract_fingerprint: 08c961623071605a5b0d17b14f94d3fe9f97a12a3e936d5f1858720caa43d275
-  manifest_path: runs/data_pipeline/20261023-083126/manifest.json
+  manifest_path: runs/data_pipeline/20261023-091701/manifest.json
   split:
     strategy: stratified_multilabel
     seed: 42

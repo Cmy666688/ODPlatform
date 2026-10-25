@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Iterator, Optional
+from typing import Iterator, Literal, Optional
 
 from .config import SourceConfig
 from .types  import Frame, SourceType, EndReason
@@ -173,7 +173,7 @@ class FrameSource(ABC):
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]:
         self.close()
         return False  # 不吞异常
 

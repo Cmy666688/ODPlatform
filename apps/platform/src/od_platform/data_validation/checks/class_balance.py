@@ -23,8 +23,8 @@ def validate_class_balance(ctx: CheckContext) -> CheckResult:
         nonzero = {c: n for c, n in st.class_instances.items() if n > 0}
         if len(nonzero) < 2:
             continue
-        max_c = max(nonzero, key=nonzero.get)
-        min_c = min(nonzero, key=nonzero.get)
+        max_c = max(nonzero, key=nonzero.__getitem__)
+        min_c = min(nonzero, key=nonzero.__getitem__)
         ratio = nonzero[max_c] / nonzero[min_c]
         if ratio >= STATS_MAX_IMBALANCE_RATIO:
             sev = CheckSeverity.WARNING

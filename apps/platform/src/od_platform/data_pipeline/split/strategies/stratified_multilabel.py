@@ -7,6 +7,7 @@
 """
 import random
 from collections import Counter
+from collections.abc import Mapping
 
 from od_platform.common.constants import SplitStrategy
 from od_platform.data_pipeline.split.registry import SplitOptions, register_strategy
@@ -15,7 +16,7 @@ from od_platform.data_pipeline.split.strategies._common import validate_rates
 _EPS = 1e-9
 
 
-def _argmax_tiebreak(primary: dict[str, float], secondary: dict[str, float],
+def _argmax_tiebreak(primary: Mapping[str, float], secondary: Mapping[str, float],
                      rng: random.Random) -> str:
     """按 primary 取最大;同分按 secondary 取最大;再同分 rng 随机。"""
     best_p = max(primary.values())
@@ -39,7 +40,7 @@ def iterative_stratify(sample_labels: list[set[str]], proportions: list[float],
     label_count = Counter(lbl for labels in sample_labels for lbl in labels)
     n_samples = len(sample_labels)
     fold_counts = [0] * n_folds
-    fold_label_counts = [Counter() for _ in range(n_folds)]
+    fold_label_counts: list[Counter[str]] = [Counter() for _ in range(n_folds)]
     fold_of: list[int] = [0] * n_samples
 
     def rarest(labels: set[str]) -> float:

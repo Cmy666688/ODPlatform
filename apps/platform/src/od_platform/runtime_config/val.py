@@ -284,5 +284,6 @@ class YOLOValConfig(BaseConfig):
                     f"{' / '.join(offenders)} 仅对 segment 任务有效, "
                     f"当前 task={self.task!r}, 这些值将被忽略.",
                     UserWarning,
+                    stacklevel=2,
                 )
         return self

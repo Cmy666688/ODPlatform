@@ -136,7 +136,7 @@ class VideoSource(FrameSource):
         return self._cap is not None and not self._is_stream
 
     def seek(self, frame: Optional[int] = None, time_sec: Optional[float] = None) -> bool:
-        if not self.seekable:
+        if not self.seekable or self._cap is None:
             reason = "网络流" if self._is_stream else "未打开的视频"
             logger.warning(f"{reason}不支持 seek")
             return False
@@ -150,6 +150,7 @@ class VideoSource(FrameSource):
                 return False
             frame = int(time_sec * self._fps)
 
+        assert frame is not None
         frame = max(0, frame)
         ok = self._cap.set(cv2.CAP_PROP_POS_FRAMES, float(frame))
         if ok:

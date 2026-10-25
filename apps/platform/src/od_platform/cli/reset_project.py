@@ -252,7 +252,11 @@ def _delete_one(path: Path, idx: int, total: int, file_count: int, size: int) ->
         logger.info(f"[{idx}/{total}] 删除 {rel} ({size_str}, {file_count} 个文件)")
 
     try:
-        shutil.rmtree(path, onexc=_on_rm_error)
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=_on_rm_error)
+        else:
+            # Python 3.10/3.11 的回调收到 exc_info 三元组,统一交给同一处理器。
+            shutil.rmtree(path, onerror=lambda func, name, info: _on_rm_error(func, name, info[1]))
         # 删完后恢复该目录下 git 追踪的文件(如 runs/README.md)——
         # reset 的契约是"回到 git 刚 clone 的状态",而非"目录整个消失"
         _restore_git_tracked(rel)

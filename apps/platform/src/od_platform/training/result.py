@@ -54,7 +54,7 @@ class TrainMetrics:
 
     @classmethod
     def from_yolo_results(cls, results: Any, *, run_id: str,
-                          model_trainer: Any = None) -> "TrainMetrics":
+                          model_trainer: Any = None, task: Optional[str] = None) -> "TrainMetrics":
         """从 ultralytics 结果对象构造。
         ★ run_id 必填 keyword-only, 不是内部 datetime.now(): 这方法在训练【结束】时被调用,
           而 run_id 在训练【开始前】定, 若这里 now() 审计就有两个时间, "结果属于哪次"只能猜。
@@ -79,12 +79,12 @@ class TrainMetrics:
         names = getattr(results, "names", {}) or {}
         maps = getattr(results, "maps", None)
         size = int(getattr(maps, "size", 0) or 0)
-        if names and size:
+        if names and size and maps is not None:
             for idx, class_name in names.items():
                 if int(idx) < size:
                     class_map[str(class_name)] = _safe_float(maps[idx])
 
-        return cls(run_id=run_id, task=getattr(results, "task", "unknown"), save_dir=save_dir,
+        return cls(run_id=run_id, task=getattr(results, "task", None) or task or "unknown", save_dir=save_dir,
                    speed_ms=speed_ms, overall=overall, class_map_50_95=class_map)
 
     def to_dict(self) -> Dict[str, Any]:

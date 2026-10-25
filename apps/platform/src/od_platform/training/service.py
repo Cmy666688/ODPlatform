@@ -16,8 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from od_platform.common import refs, stamp
-from od_platform.common.lineage import TOOL_VERSION
-from od_platform.common.paths import PRETRAINED_MODELS_DIR
+from od_platform.common.paths import PRETRAINED_MODELS_DIR, TRAINED_MODELS_DIR
 from od_platform.common.run_context import RunContext
 from od_platform.data_validation.identity import DataIdentity, reconcile_data_identity
 from od_platform.runtime_config.report import log_config_report
@@ -42,12 +41,13 @@ class TrainResult:
 
 
 def _resolve_model_arg(model: str) -> str:
-    """模型引用 -> 给 ultralytics 的字符串。本地有就用绝对路径, 没有原样交它自动下载。"""
-    p = refs.resolve_ref(model, base_dir=PRETRAINED_MODELS_DIR, default_suffix=".pt")
-    if p.exists():
-        logger.info("模型(解析): %s", p)
-        return str(p)
-    logger.info("本地无 %s, 交给 ultralytics 自动下载: %s", p.name, model)
+    """模型引用 -> 给 ultralytics 的字符串. 查找顺序: models/trained → models/pretrained → 原样交自动下载."""
+    for base in (TRAINED_MODELS_DIR, PRETRAINED_MODELS_DIR):
+        p = refs.resolve_ref(model, base_dir=base, default_suffix=".pt")
+        if p.exists():
+            logger.info("模型(解析): %s", p)
+            return str(p)
+    logger.info("本地无 %s, 交给 ultralytics 自动下载: %s", model, model)
     return model
 
 
@@ -131,7 +131,8 @@ def train_yolo(*, config: Any, data_yaml: Path, run: RunContext, stem: str,
                            identity=identity, message=f"训练异常: {e}")
 
     # 5) 指标(run_id 注入 —— 不许自己拍表)
-    metrics = TrainMetrics.from_yolo_results(results, run_id=run.run_id)
+    metrics = TrainMetrics.from_yolo_results(results, run_id=run.run_id,
+                                            task=getattr(config, "task", None))
     log_train_metrics(metrics, logger=logger)
 
     # 6) ★ 盖 train 章: 我(D6)训练吃了这批数据。data_fingerprint 用 identity 里

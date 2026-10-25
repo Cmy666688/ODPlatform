@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def time_it(
     iterations: int = 1,
     name: str | Callable[..., str] | None = None,
-    logger_instance: logging.Logger = None,
+    logger_instance: logging.Logger | None = None,
 ):
     """
     通用执行时间测量装饰器。
@@ -66,7 +66,7 @@ def time_it(
             secs = (seconds % 3600) % 60
             return f"{hours:.0f} 小时 {mins:.0f} 分钟 {secs:.2f} 秒"
 
-    def _resolve_name(func, args, kwargs) -> str:
+    def _resolve_name(func: Callable, args, kwargs) -> str:
         # 只有 callable 才走"运行期取名"; str / None 完全保持老逻辑
         if callable(name):
             try:

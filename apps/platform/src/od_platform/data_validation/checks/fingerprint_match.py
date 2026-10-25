@@ -15,7 +15,7 @@ _NAME = "fingerprint_match"
 @check(_NAME)
 def validate_fingerprint_match(ctx: CheckContext) -> CheckResult:
     manifest, err, odp_meta = load_manifest_from_yaml(ctx.snapshot.yaml_data)
-    if err:
+    if err or manifest is None:
         return CheckResult(_NAME, CheckSeverity.ERROR, f"拿不到 D3 划分契约: {err}", {})
     recomputed = compute_contract_fingerprint(
         manifest.dataset, manifest.strategy, manifest.seed, manifest.ratios,

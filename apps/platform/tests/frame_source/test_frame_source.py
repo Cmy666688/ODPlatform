@@ -30,7 +30,7 @@ from od_platform.frame_source import (
     CameraConfig, VideoConfig, ImageConfig, ImageFolderConfig, SourceConfig,
     Frame, FrameInfo, CameraIntrinsics, SourceType,
     FrameSource, register_source, build_from_config, build_from_string, list_sources,
-    ThreadedSource, BufferStrategy, AsyncSource, ReconnectingSource, EndReason,
+    BufferStrategy, AsyncSource, ReconnectingSource, EndReason,
 )
 
 # ── 迷你测试框架 ──

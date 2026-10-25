@@ -31,17 +31,21 @@ def convert_pascal_voc(input_dir: Path, output_labels_dir: Path,
     for xf in xml_files:
         root = ET.parse(xf).getroot()
         size = root.find("size")
-        W = float(size.findtext("width"))
-        H = float(size.findtext("height"))
+        if size is None:
+            raise ValueError(f"{xf}: 缺少 size 节点")
+        W = float(size.findtext("width", ""))
+        H = float(size.findtext("height", ""))
         lines: list[str] = []
         for obj in root.iter("object"):
             name = obj.findtext("name", "").strip()
             if name not in class_to_idx:
                 continue                                # 白名单之外的类:静默丢弃
             bb = obj.find("bndbox")
+            if bb is None:
+                raise ValueError(f"{xf}: 类别 {name!r} 缺少 bndbox 节点")
             cx, cy, bw, bh = normalize_box(
-                float(bb.findtext("xmin")), float(bb.findtext("ymin")),
-                float(bb.findtext("xmax")), float(bb.findtext("ymax")), W, H)
+                float(bb.findtext("xmin", "")), float(bb.findtext("ymin", "")),
+                float(bb.findtext("xmax", "")), float(bb.findtext("ymax", "")), W, H)
             lines.append(f"{class_to_idx[name]} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
         (output_labels_dir / f"{xf.stem}.txt").write_text(
             "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")

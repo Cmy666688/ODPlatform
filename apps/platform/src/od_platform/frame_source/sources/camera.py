@@ -53,6 +53,7 @@ class CameraSource(FrameSource):
 
     def __init__(self, config: CameraConfig):
         super().__init__(config)
+        self.config: CameraConfig = config
         self._cap: Optional[cv2.VideoCapture] = None
         self._actual_fps: Optional[float] = None
 
@@ -70,7 +71,7 @@ class CameraSource(FrameSource):
             return False
 
         # 撞墙 F①: 先设编码为 MJPG, 否则高帧率上不去
-        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*cfg.codec))
+        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*cfg.codec))
         # 撞墙 F③: 顺序 —— 编码 → 分辨率 → 帧率
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  cfg.width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.height)

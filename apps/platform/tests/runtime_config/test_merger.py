@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from od_platform.runtime_config.train  import YOLOTrainConfig
 from od_platform.runtime_config.merger import (
-    ConfigMerger, ConfigSource, ConfigMetadata,
+    ConfigMerger, ConfigSource,
 )
 
 
@@ -163,9 +163,11 @@ class TestEdgeCases:
         m = ConfigMerger()
 
         c1 = m.merge(YOLOTrainConfig, sources=[(ConfigSource.YAML, {"epochs": 100})])
+        assert c1.epochs == 100
         assert m.get_metadata("epochs").value == 100
 
         c2 = m.merge(YOLOTrainConfig, sources=[(ConfigSource.CLI, {"epochs": 200})])
+        assert c2.epochs == 200
         # 第二次合并应该重置, 第一次的痕迹不该残留
         assert m.get_metadata("epochs").value  == 200
         assert m.get_metadata("epochs").source == ConfigSource.CLI

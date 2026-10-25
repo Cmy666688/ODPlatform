@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar, List, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
 
@@ -830,6 +830,7 @@ class YOLOTrainConfig(BaseConfig):
                 "mosaic=0.0 但设置了 close_mosaic > 0, "
                 "close_mosaic 将不会生效.",
                 UserWarning,
+                stacklevel=2,
             )
 
         return self

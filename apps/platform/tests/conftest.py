@@ -111,8 +111,8 @@ def demo_yaml_class_missing_train(tmp_path) -> Path:
     """train 里删光 反光衣(class 1)、并保证 val 里有一条 → missing_in_train WARNING。"""
     def mutate(root: Path):
         for lbl in (root / "labels" / "train").glob("*.txt"):
-            kept = [l for l in lbl.read_text(encoding="utf-8").splitlines()
-                    if l.strip() and not l.startswith("1 ")]
+            kept = [line for line in lbl.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.startswith("1 ")]
             lbl.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
         val_lbl = _first_label(root, "val")
         val_lbl.write_text(val_lbl.read_text(encoding="utf-8") + "1 0.50 0.50 0.20 0.20\n",

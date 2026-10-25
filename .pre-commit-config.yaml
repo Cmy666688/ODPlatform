@@ -1,0 +1,12 @@
+# 使用当前项目环境,与 CI 共用 scripts/check_project.py。
+# 不挂自动格式化或 --fix,保留现有源码风格。
+repos:
+  - repo: local
+    hooks:
+      - id: odp-check
+        name: ODPlatform (ruff + mypy + pytest)
+        entry: python scripts/check_project.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true

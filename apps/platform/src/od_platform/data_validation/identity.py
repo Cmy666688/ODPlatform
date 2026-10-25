@@ -57,7 +57,7 @@ class DataIdentity:
     @property
     def validated_pass(self) -> bool:
         """D4 的章在, 且结论 PASS。"""
-        return bool(self.validate_stamp) and \
+        return self.validate_stamp is not None and \
             self.validate_stamp.get("overall_severity") == "PASS"
 
     def to_dict(self) -> Dict[str, Any]:

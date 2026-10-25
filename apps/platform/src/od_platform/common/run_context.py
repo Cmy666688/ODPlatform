@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from od_platform.common import paths
 
@@ -43,5 +44,5 @@ class RunContext:
         self.run_dir.mkdir(parents=True, exist_ok=False)
         return self
 
-    def __exit__(self, *exc) -> bool:
+    def __exit__(self, *exc) -> Literal[False]:
         return False                                   # 不吞异常

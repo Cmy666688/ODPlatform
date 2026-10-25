@@ -100,7 +100,10 @@ def read_stamp(data_fingerprint: str, stage_file: str) -> Optional[Dict[str, Any
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("章内容必须是 JSON 对象")
+        return data
     except Exception as e:
         logger.warning("章损坏, 读取失败 %s: %s", path, e)
         return None

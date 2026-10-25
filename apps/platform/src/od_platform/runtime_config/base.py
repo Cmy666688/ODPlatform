@@ -315,6 +315,7 @@ class BaseConfig(BaseModel):
                 f"imgsz={v} 不是 32 的倍数. "
                 f"虽然可以运行, 但建议使用 32 的倍数(如 640, 672, 704)以获得最佳性能.",
                 UserWarning,
+                stacklevel=2,
             )
         return v
 
@@ -379,6 +380,7 @@ class BaseConfig(BaseModel):
                     f"workers={self.workers} 远大于 batch={self.batch}, "
                     f"可能造成资源浪费. 建议 workers <= batch * 2",
                     UserWarning,
+                    stacklevel=2,
                 )
         return self
 
@@ -403,7 +405,7 @@ class BaseConfig(BaseModel):
         groups: Dict[str, List[str]] = {}
         for field_name, field_info in self.__class__.model_fields.items():
             extra = field_info.json_schema_extra or {}
-            group = extra.get("group", "其他") if isinstance(extra, dict) else "其他"
+            group = str(extra.get("group", "其他")) if isinstance(extra, dict) else "其他"
             groups.setdefault(group, []).append(field_name)
         return groups
 

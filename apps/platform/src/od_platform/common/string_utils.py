@@ -4,6 +4,7 @@
 # @Project   : ODPlatform
 # @Function  : 字符串工具——CJK 感知的对齐 / 表格格式化
 
+from typing import Optional
 
 def get_display_width(text: str) -> int:
     """
@@ -69,7 +70,7 @@ def pad_to_width(text: str, width: int, align: str = 'left') -> str:
         return text + ' ' * padding
 
 
-def format_table_row(columns: list, widths: list, aligns: list = None) -> str:
+def format_table_row(columns: list, widths: list, aligns: Optional[list] = None) -> str:
     """格式化表格一行"""
     if aligns is None:
         aligns = ['left'] * len(columns)
@@ -82,7 +83,7 @@ def format_table_row(columns: list, widths: list, aligns: list = None) -> str:
     return ' '.join(parts)
 
 
-def format_table_separator(widths: list, char: str = '-') -> str:
+def format_table_separator(widths: list[int], char: str = '-') -> str:
     """生成与表格列宽匹配的分隔线"""
     total = sum(widths) + len(widths) - 1
     return char * total

@@ -23,12 +23,12 @@ def validate_duplicate_annotations(ctx: CheckContext) -> CheckResult:
     for split in snap.splits:
         for lbl in snap.label_files_per_split[split]:
             try:
-                lines = [l.strip() for l in lbl.read_text(encoding="utf-8").splitlines()
-                         if l.strip()]
+                lines = [line.strip() for line in lbl.read_text(encoding="utf-8").splitlines()
+                         if line.strip()]
             except OSError:
                 continue
             counts = Counter(lines)
-            dups = {l: n for l, n in counts.items() if n > 1}
+            dups = {line: n for line, n in counts.items() if n > 1}
             if dups:
                 files_with_dup += 1
                 dup_rows += sum(n - 1 for n in dups.values())

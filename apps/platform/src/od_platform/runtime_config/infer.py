@@ -467,6 +467,7 @@ class YOLOInferConfig(BaseConfig):
                 "save_conf=True 但 save_txt=False, save_conf 不会生效. "
                 "若想保存置信度, save_txt 必须为 True.",
                 UserWarning,
+                stacklevel=2,
             )
 
         # stream_buffer 隐含 stream=True
@@ -475,6 +476,7 @@ class YOLOInferConfig(BaseConfig):
                 "stream_buffer=True 但 stream=False, stream_buffer 不会生效. "
                 "stream_buffer 仅在流式推理 (stream=True) 时有意义.",
                 UserWarning,
+                stacklevel=2,
             )
 
         # retina_masks 仅 segment 任务有效
@@ -483,6 +485,7 @@ class YOLOInferConfig(BaseConfig):
                 f"retina_masks=True 仅对 segment 任务有效, "
                 f"当前 task={self.task!r}, 该字段将被忽略.",
                 UserWarning,
+                stacklevel=2,
             )
 
         return self
