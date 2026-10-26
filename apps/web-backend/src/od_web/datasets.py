@@ -64,10 +64,10 @@ def listing() -> list[dict]:
     return [describe("wsodd"), *[describe(key) for key in Dataset.objects.values_list("id", flat=True)]]
 
 
-def validate(identifier: str) -> dict:
+def validate(identifier: str, *, quick=False) -> dict:
     if identifier == "wsodd":
         from od_platform.data_pipeline.wsodd import validate as validate_detection
-        detection_report: dict = validate_detection(dataset_yaml(identifier)); return detection_report
+        detection_report: dict = validate_detection(dataset_yaml(identifier), use_cache=quick); return detection_report
     report = validate_semantic_dataset(dataset_yaml(identifier), run_id=identifier).to_dict()
     Dataset.objects.filter(pk=identifier).update(report=report, status="blocked" if report["overall_severity"] == "ERROR" else "ready")
     return report

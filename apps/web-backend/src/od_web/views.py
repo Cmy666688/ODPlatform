@@ -149,7 +149,7 @@ def jobs(request):
         if (configuration.backend == "yolo") != (selected.get("task") == "detect"):
             raise ApiError(422, "模型任务与数据标注不匹配,请刷新训练配置")
         if not selected["available"] or selected["status"] != "ready": raise ApiError(422, "数据集尚未就绪或存在阻断问题")
-        report = datasets.validate(configuration.data)
+        report = datasets.validate(configuration.data, quick=True) if configuration.backend == "yolo" else datasets.validate(configuration.data)
         if report["overall_severity"] == "ERROR": raise ApiError(422, "数据质检 ERROR,请修复后训练")
         document = submitted.model_dump(exclude={"upload_id", "model_id"})
         document["dataset_name"] = selected["name"]

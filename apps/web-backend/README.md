@@ -1,5 +1,7 @@
 # apps/web-backend — Django 数据集与训练工作台
 
+当前默认数据与模型为 **WSODD / YOLOv8n 水面目标检测**，具体数据划分和完整训练配方见 [WSODD 实验说明](../../docs/wsodd-training.md)。下文的二值掩膜上传格式属于兼容入口，WSODD 原始 VOC 包由本地预处理命令接入。
+
 采用 Django 5.2 的路由、视图、表单、ORM、数据库迁移、CSRF 与 Admin。
 Vue 3 用于数据集管理交互，沿用现有绿色监控界面。Vue 生产文件随包提供，页面不依赖外部 CDN。
 训练、独立测试和图片推理由远程 CUDA GPU 上的 `apps/platform` 独立进程执行。

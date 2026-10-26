@@ -80,3 +80,11 @@ def test_deterministic_groups_do_not_depend_on_row_order():
     rows = [{"group": f"g{index//4}", "classes": list(range(14))} for index in range(24)]
     assert wsodd.assign_groups(rows) == wsodd.assign_groups(list(reversed(rows)))
     assert wsodd.source_group("192.168.0.64_01_20200908130244888", "annotator1") == wsodd.source_group("192.168.0.64_01_20200908130245999", "annotator2")
+
+
+def test_image_cache_invalidates_after_jpeg_content_changes(web):
+    prepare(web)
+    image = next((paths.PROCESSED_DATA_DIR / "wsodd/images").rglob("*.jpg"))
+    image.write_bytes(image.read_bytes() + b"changed-source")
+    assert wsodd.validate(paths.dataset_yaml_path("wsodd"), use_cache=True)["overall_severity"] == "ERROR"
+    assert wsodd.validate(paths.dataset_yaml_path("wsodd"), use_cache=False)["overall_severity"] == "ERROR"

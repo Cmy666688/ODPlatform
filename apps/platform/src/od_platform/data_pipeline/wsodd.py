@@ -117,9 +117,13 @@ def prepare(archive: Path):
     return report
 
 
-def validate(yaml_path: Path):
+def validate(yaml_path: Path, *, use_cache=False):
     document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     root = paths.ROOT_DIR / document["path"]; manifest = json.loads((paths.ROOT_DIR / document["manifest_path"]).read_text(encoding="utf-8"))
+    cache_path = paths.META_DIR / "data_validation/wsodd_image_cache.json"
+    cached = json.loads(cache_path.read_text(encoding="utf-8")) if use_cache and cache_path.exists() else {}
+    entries = cached.get("images", {}) if cached.get("root") == str(root.resolve()) else {}
+    refreshed = {}
     rows = []; issues = []; groups = defaultdict(set); hashes = defaultdict(set); counts: dict[str, Counter] = {s: Counter() for s in SPLITS}
     expected = {(row["split"], row["stem"]) for row in manifest["samples"]}
     actual = {(s, p.stem) for s in SPLITS for p in (root / "images" / s).glob("*.jpg")}
@@ -128,10 +132,16 @@ def validate(yaml_path: Path):
         row = dict(original); split, stem = row["split"], row["stem"]
         try:
             image = root / "images" / split / (stem + ".jpg"); label = root / "labels" / split / (stem + ".txt")
-            row["image_sha256"] = file_sha256(image); row["label_sha256"] = file_sha256(label)
-            with Image.open(image) as decoded:
-                if decoded.size != (row["width"], row["height"]): issues.append(stem + ": dimensions")
-                decoded.verify()
+            status = image.stat(); key = image.relative_to(root).as_posix(); previous = entries.get(key, {})
+            if use_cache and previous.get("size") == status.st_size and previous.get("mtime_ns") == status.st_mtime_ns:
+                row["image_sha256"] = previous["sha256"]
+            else:
+                row["image_sha256"] = file_sha256(image)
+                with Image.open(image) as decoded:
+                    if decoded.size != (row["width"], row["height"]): issues.append(stem + ": dimensions")
+                    decoded.verify()
+            refreshed[key] = {"size": status.st_size, "mtime_ns": status.st_mtime_ns, "sha256": row["image_sha256"]}
+            row["label_sha256"] = file_sha256(label)
             for line in label.read_text(encoding="utf-8").splitlines():
                 values = [float(value) for value in line.split()]
                 if len(values) != 5 or not all(np.isfinite(values)) or values[0] != int(values[0]) or not 0 <= int(values[0]) < len(NAMES):
@@ -158,7 +168,9 @@ def validate(yaml_path: Path):
     add("detection_eval_coverage", bool(absent["val"] or absent["test"]), "验证/测试类别覆盖;缺失类别不具备独立验收证据", warning=True, missing=absent)
     add("detection_split_policy", True, "原包无官方划分;按相机与采集日推断分组,不等同于已证明场景独立", warning=True)
     report = {"run_id": "wsodd", "overall_severity": "ERROR" if any(c["severity"] == "ERROR" for c in checks) else "WARNING",
-              "data_fingerprint": digest, "results": checks, "class_counts": {s: {NAMES[c]: counts[s][c] for c in range(len(NAMES))} for s in SPLITS}}
+              "data_fingerprint": digest, "results": checks, "image_digest_cache": use_cache,
+              "class_counts": {s: {NAMES[c]: counts[s][c] for c in range(len(NAMES))} for s in SPLITS}}
+    if report["overall_severity"] != "ERROR": write_json(cache_path, {"root": str(root.resolve()), "images": refreshed})
     write_json(paths.RUNS_DIR / "data_validation/wsodd/report.json", report)
     return report
 
