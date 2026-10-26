@@ -25,7 +25,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 网页上传入口采用多类别目标检测,不再把新数据集转换为二值掩膜。
 支持 ZIP、TAR、TAR.GZ、TGZ 和浏览器文件夹上传。单次最大 4 GiB,后台解压最大 12 GiB、100000 个文件,
 单文件最大 64 MiB、图像最大 1600 万像素。Django 将大文件落到临时文件,接收与解包均分块读取。
-上传进度与后台解包、转换、质检进度分别显示。当前不提供断点续传。
+上传进度与后台解包、转换、质检进度分别显示。网页上传当前不提供断点续传。
 
 - VOC: `JPEGImages/ + Annotations/`,也支持 WSODD 的 `image/ + annotation/` 和 `images/ + annotations/`。
   从 XML 的 object/name 生成固定且有序的类别表,检查标注尺寸与绝对像素 xyxy 框。
@@ -61,19 +61,20 @@ python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --
 更新后运行 `python -m od_web.remote_setup --deploy-only` 同步源码；请在没有活动任务时更新。
 
 新检测任务自动打包上传图像、检测标签、配置和 manifest，远端复核指纹与质检后开训。
-推理自动上传所选权重和图片。训练与独立测试结束后，权重、报告、曲线、掩膜和对比图回传本机，
+推理自动上传所选权重和图片。训练与独立测试结束后，权重、报告、曲线、检测框和对比图回传本机，
 同步完成才标记“已完成”。监控面板显示远程设备的实时资源数据，历史实验采样不冒充当前连接。
 
 任务通过 SSH 在远端独立运行。连接中断时显示同步异常并自动重连，使用同一任务 ID 和启动标记
 防止重复执行；本机同步进程意外退出后，访问实验列表会恢复同步。停止请求保存在本地，重连后补发。
-这属于监控重连，不会在远程训练进程自身崩溃后自动重训或断点续训。
+远程大包传输会依据完整内容摘要接续临时文件,完成后在远端再次计算 SHA256,校验通过才解包。
+这属于传输与监控重连，不会在远程训练进程自身崩溃后自动重训或断点续训。
 
 ## 数据和实验追溯
 
 - SQLite 台账：`.odp-meta/web/platform.sqlite3`，记录导入来源、状态、统计及质检报告。
 - 上传原件和导入日志：`.odp-meta/dataset_uploads/<id>/`。
 - 标准化数据：`data/processed/ds_<id>/`；运行时配置：`apps/platform/configs/datasets/ds_<id>.yaml`。
-- 契约：`runs/data_pipeline/<run_id>/semantic_manifest.json`，包含图像、掩膜和划分身份。
+- 检测契约：`data/processed/ds_<id>/manifest.json`，包含原件和派生图像/标签摘要、类别与划分身份。
 - 训练与验收：`runs/training/`、`runs/web_jobs/`，保留原有完整训练记录。
 
 训练提交前重做质检，ERROR 阻止开训。每批更新进度，每轮保存 best/last，
@@ -104,7 +105,7 @@ Admin：<http://127.0.0.1:8000/admin/>。管理员由使用者自行创建；没
 | GET/POST /api/datasets | 列表 / multipart 导入 |
 | GET /api/datasets/template | 下载合成样本 ZIP |
 | GET /api/datasets/<id> | 导入状态与统计 |
-| GET /api/datasets/<id>/previews | 原图与掩膜预览 |
+| GET /api/datasets/<id>/previews | 原图与类别目标框预览 |
 | POST /api/datasets/<id>/validate | 重做质检 |
 | GET /api/config | 默认训练配方和参数 Schema |
 | GET/POST /api/jobs | 实验列表 / 创建任务 |

@@ -64,7 +64,8 @@ class Connection:
                                 key_filename=self.config.key_file, timeout=8, auth_timeout=8, banner_timeout=8,
                                 look_for_keys=False, allow_agent=False)
             self.client.get_transport().set_keepalive(20)
-            self.sftp = self.client.open_sftp(); self.sftp.get_channel().settimeout(60)
+            self.sftp = paramiko.SFTPClient.from_transport(self.client.get_transport(), window_size=16*1024**2, max_packet_size=128*1024)
+            self.sftp.get_channel().settimeout(60)
         except Exception:
             self.client.close(); raise
 
@@ -99,7 +100,7 @@ class Connection:
         except FileNotFoundError:
             self.mkdir(path.parent); self.sftp.mkdir(str(path))
 
-    def put(self, source: Path, target: PurePosixPath):
+    def put(self, source: Path, target: PurePosixPath, *, on_progress=None):
         self.mkdir(target.parent)
         # 输入按内容核验,重连不重复传输相同文件。
         digest = hashlib.sha256()
@@ -113,7 +114,34 @@ class Connection:
                     if stream.read().decode() == checksum: return
         except FileNotFoundError: pass
         temporary = str(target) + ".upload"
-        self.sftp.put(str(source), temporary)
+        total = source.stat().st_size
+        if total < 8 * 1024**2:
+            self.sftp.put(str(source), temporary)
+        else:
+            # 仅恢复与当前完整内容摘要匹配的临时文件;SSH 中断后不重传整个大包。
+            identity = temporary + ".identity"; offset = 0
+            try:
+                with self.sftp.open(identity) as stream: previous = stream.read().decode()
+                size = self.sftp.stat(temporary).st_size
+                if previous == checksum and 0 <= size <= total: offset = size
+            except FileNotFoundError: pass
+            with self.sftp.open(identity, "w") as stream: stream.write(checksum)
+            with source.open("rb") as local, self.sftp.open(temporary, "r+b" if offset else "wb") as output:
+                output.set_pipelined(True); output.seek(offset); local.seek(offset)
+                if on_progress: on_progress(offset, total)
+                reported = time.monotonic()
+                while chunk := local.read(1024 * 1024):
+                    output.write(chunk); offset += len(chunk)
+                    if on_progress and time.monotonic() - reported >= 2:
+                        on_progress(offset, total); reported = time.monotonic()
+            if self.sftp.stat(temporary).st_size != total: raise OSError("远程文件大小不完整,等待继续传输")
+            _, stdout, stderr = self.client.exec_command("sha256sum " + shlex.quote(temporary), timeout=180)
+            actual = stdout.read().decode().split(); error = stderr.read().decode("utf-8", "replace")
+            if stdout.channel.recv_exit_status() or not actual: raise OSError("远程文件校验未完成: " + error[-300:])
+            if actual[0] != checksum:
+                with self.sftp.open(identity, "w") as stream: stream.write("")
+                raise OSError("远程文件摘要不一致,下次从头传输")
+            if on_progress: on_progress(total, total)
         self.sftp.posix_rename(temporary, str(target))
         with self.sftp.open(marker, "w") as stream: stream.write(checksum)
 
@@ -191,7 +219,12 @@ def prepare(connection: Connection, directory: Path, request: dict):
                         if source.is_symlink() or not source.resolve().is_relative_to(paths.ROOT_DIR.resolve()): raise ValueError("检测数据超出项目目录")
                         archive.add(source, arcname=source.relative_to(paths.ROOT_DIR).as_posix())
                 bundle.with_suffix(".building").replace(bundle)
-            connection.put(bundle, remote / "runs/web_jobs" / directory.name / "dataset.tar")
+            def progress(done, total):
+                state_file = directory / "status.json"
+                state = json.loads(state_file.read_text(encoding="utf-8"))
+                state.update(upload_bytes=done, upload_total_bytes=total, phase="uploading")
+                write_json(state_file, state)
+            connection.put(bundle, remote / "runs/web_jobs" / directory.name / "dataset.tar", on_progress=progress)
             connection.put_json(document, remote / "runs/web_jobs" / directory.name / "request.json")
             connection.command(["unpack", directory.name]); targets = []
         else:

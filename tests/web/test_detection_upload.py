@@ -108,3 +108,21 @@ def test_names_and_labels_remain_multiclass_without_executing_uploaded_config(de
     manifest = json.loads((paths.PROCESSED_DATA_DIR / result["id"] / "manifest.json").read_text(encoding="utf-8"))
     assert all(set(row["classes"]) == {0, 1, 2} for row in manifest["samples"])
     assert not (Path(document["path"]) / "masks").exists()
+
+
+@pytest.mark.parametrize("member,allowed", [("data/processed/ds_1111111111111111/labels/train/a.txt", True),
+                                            ("data/processed/ds_2222222222222222/labels/train/a.txt", False),
+                                            ("data/processed/ds_1111111111111111/../../outside.txt", False)])
+def test_remote_detection_bundle_is_restricted_to_requested_dataset(web, member, allowed):
+    import tarfile
+    from od_web import remote_agent
+    _, store, root = web
+    directory = store.root / ("a" * 32); directory.mkdir()
+    (directory / "request.json").write_text(json.dumps({"config": {"backend": "yolo", "data": "ds_1111111111111111"}}))
+    with tarfile.open(directory / "dataset.tar", "w") as archive:
+        info = tarfile.TarInfo(member); info.size = 3; archive.addfile(info, io.BytesIO(b"abc"))
+    if allowed:
+        assert remote_agent.unpack(directory.name)["unpacked"]
+        assert (root / member).read_bytes() == b"abc"
+    else:
+        with pytest.raises(ValueError): remote_agent.unpack(directory.name)

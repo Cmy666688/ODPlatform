@@ -112,6 +112,7 @@ function renderOverview() {
   const monitored = state.jobs.find((job) => job.id === state.monitorId);
   const hardware = data.hardware;
   const detection = data.dataset.task === "detect";
+  if (!state.uploadId) $("#upload-description").textContent = detection ? `使用 ${data.dataset.name} 最佳权重查看 ${Object.keys(data.dataset.names || {}).length} 类目标` : "使用所选训练权重查看结果";
   $("#dataset-task").textContent = detection ? `${Object.keys(data.dataset.names || {}).length} 类目标检测` : "二值语义分割";
   $("#recipe-summary").innerHTML = detection ? `<span>YOLOv8n</span><span>640 × 640</span><span>AdamW</span><span>${Object.keys(data.dataset.names || {}).length} 类目标检测</span>` : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
   $("#f1-target-label").hidden = detection;
@@ -188,6 +189,7 @@ function renderMonitor() {
   $("#step-test").className = job?.status === "completed" ? "done" : job?.phase === "testing" ? "active" : "";
   $("#step-results").className = job?.status === "completed" ? "done" : "";
   $("#batch-progress").textContent = job?.error || (job ? `${phaseNames[job.phase] || statusNames[job.status]}${job.batch ? ` · ${job.batch} / ${job.batches || "—"} 批` : ""}${job.cancel_requested ? " · 已请求停止，等待当前计算结束" : ""}` : "训练尚未启动。GPU 就绪后可提交完整实验。");
+  if (job?.phase === "uploading" && job.upload_total_bytes) $("#batch-progress").textContent += ` · ${number(job.upload_bytes / 1024 ** 2, 0)} / ${number(job.upload_total_bytes / 1024 ** 2, 0)} MB · ${percent(job.upload_bytes / job.upload_total_bytes)}`;
 }
 
 function renderQuality(quality) {

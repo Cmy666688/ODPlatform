@@ -57,7 +57,7 @@ def test_prepare_transfers_dataset_manifest_and_every_pair(web, inline_import, m
     class Transfer:
         config = SimpleNamespace(root="/gpu/project")
         sftp = SimpleNamespace(stat=lambda _: (_ for _ in ()).throw(FileNotFoundError()))
-        def put(self, source, target): files.append((source, str(target)))
+        def put(self, source, target, **kwargs): files.append((source, str(target)))
         def put_json(self, value, target): documents[str(target)] = value
         def command(self, arguments): assert arguments == ["unpack", directory.name]
     remote.prepare(Transfer(), directory, {"kind": "training", "config": {"backend": "yolo", "architecture": "yolov8n.pt", "data": identifier, "device": "cpu"}})
