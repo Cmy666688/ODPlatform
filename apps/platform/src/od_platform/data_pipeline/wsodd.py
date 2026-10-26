@@ -33,9 +33,10 @@ def source_group(stem, folder):
     return match[1] + match[2] if match else "folder:" + folder
 
 
-def assign_groups(rows, seed=42):
+def assign_groups(rows, seed=42, names=None):
+    names = NAMES if names is None else names
     groups = sorted({row["group"] for row in rows}); index = {key: i for i, key in enumerate(groups)}
-    counts = np.zeros((len(groups), len(NAMES) + 1))
+    counts = np.zeros((len(groups), len(names) + 1))
     for row in rows:
         counts[index[row["group"]], 0] += 1
         for label in row["classes"]: counts[index[row["group"]], label + 1] += 1
@@ -120,7 +121,10 @@ def prepare(archive: Path):
 def validate(yaml_path: Path, *, use_cache=False):
     document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     root = paths.ROOT_DIR / document["path"]; manifest = json.loads((paths.ROOT_DIR / document["manifest_path"]).read_text(encoding="utf-8"))
-    cache_path = paths.META_DIR / "data_validation/wsodd_image_cache.json"
+    from od_platform.data_pipeline.detection_import import class_names
+    names = class_names(document["names"])
+    identifier = yaml_path.stem
+    cache_path = paths.META_DIR / "data_validation" / (identifier + "_image_cache.json")
     cached = json.loads(cache_path.read_text(encoding="utf-8")) if use_cache and cache_path.exists() else {}
     entries = cached.get("images", {}) if cached.get("root") == str(root.resolve()) else {}
     refreshed = {}
@@ -144,7 +148,7 @@ def validate(yaml_path: Path, *, use_cache=False):
             row["label_sha256"] = file_sha256(label)
             for line in label.read_text(encoding="utf-8").splitlines():
                 values = [float(value) for value in line.split()]
-                if len(values) != 5 or not all(np.isfinite(values)) or values[0] != int(values[0]) or not 0 <= int(values[0]) < len(NAMES):
+                if len(values) != 5 or not all(np.isfinite(values)) or values[0] != int(values[0]) or not 0 <= int(values[0]) < len(names):
                     raise ValueError("非法类别/检测框")
                 c, x, y, w, h = values
                 if not (w > 0 and h > 0 and x-w/2 >= -1e-8 and y-h/2 >= -1e-8 and x+w/2 <= 1+1e-8 and y+h/2 <= 1+1e-8):
@@ -155,23 +159,24 @@ def validate(yaml_path: Path, *, use_cache=False):
     checks = []
     def add(name, bad, summary, warning=False, **details):
         checks.append({"name": name, "severity": "WARNING" if bad and warning else "ERROR" if bad else "PASS", "summary": summary, "details": details})
-    add("detection_pairing", actual != expected or labels != expected, f"图像/标签/契约配对: {len(actual)} 张图像, {len(labels)} 个标签")
+    add("detection_pairing", actual != expected or labels != expected or any(not any(row[0] == s for row in expected) for s in SPLITS), f"图像/标签/契约配对: {len(actual)} 张图像, {len(labels)} 个标签;训练/验证/测试集均须非空")
     add("detection_boxes", bool(issues), f"图像解码、尺寸、类别与检测框异常: {len(issues)}", examples=issues[:20])
     add("detection_decode", not manifest.get("images_fully_decoded"), "所有原图已完整解码,当前文件通过 SHA256 与解码记录对账")
     add("detection_groups", any(len(value) > 1 for value in groups.values()), f"采集分组: {len(groups)} 组;禁止同组跨集合")
     add("detection_duplicates", any(len(value) > 1 for value in hashes.values()), "相同 JPEG 文件禁止跨集合")
     digest = fingerprint(rows, manifest["names"])
-    add("detection_identity", digest != manifest["data_fingerprint"] or digest != document["data_fingerprint"] or manifest["names"] != NAMES or list(document["names"].values()) != NAMES,
+    add("detection_identity", digest != manifest["data_fingerprint"] or digest != document["data_fingerprint"] or manifest["names"] != names,
         "图像、标签、划分与类别映射 SHA256 身份校验", actual_fingerprint=digest)
-    absent = {s: [NAMES[c] for c in range(len(NAMES)) if not counts[s][c]] for s in SPLITS}
+    absent = {s: [names[c] for c in range(len(names)) if not counts[s][c]] for s in SPLITS}
     add("detection_train_coverage", bool(absent["train"]), "训练集类别覆盖", missing=absent["train"])
     add("detection_eval_coverage", bool(absent["val"] or absent["test"]), "验证/测试类别覆盖;缺失类别不具备独立验收证据", warning=True, missing=absent)
-    add("detection_split_policy", True, "原包无官方划分;按相机与采集日推断分组,不等同于已证明场景独立", warning=True)
-    report = {"run_id": "wsodd", "overall_severity": "ERROR" if any(c["severity"] == "ERROR" for c in checks) else "WARNING",
+    inferred = manifest.get("split_policy") != "provided"
+    add("detection_split_policy", inferred, "按文件名推断分组,需结合采集记录确认场景独立" if inferred else "保留用户划分;仍需结合原始采集记录确认场景独立", warning=True)
+    report = {"run_id": identifier, "overall_severity": "ERROR" if any(c["severity"] == "ERROR" for c in checks) else "WARNING" if any(c["severity"] == "WARNING" for c in checks) else "PASS",
               "data_fingerprint": digest, "results": checks, "image_digest_cache": use_cache,
-              "class_counts": {s: {NAMES[c]: counts[s][c] for c in range(len(NAMES))} for s in SPLITS}}
+              "class_counts": {s: {names[c]: counts[s][c] for c in range(len(names))} for s in SPLITS}}
     if report["overall_severity"] != "ERROR": write_json(cache_path, {"root": str(root.resolve()), "images": refreshed})
-    write_json(paths.RUNS_DIR / "data_validation/wsodd/report.json", report)
+    write_json(paths.RUNS_DIR / "data_validation" / identifier / "report.json", report)
     return report
 
 

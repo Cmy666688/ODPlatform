@@ -109,7 +109,7 @@ def evaluate(config, best, data_yaml, document, root, directory, history, update
         visualized.append(sample["stem"])
         update({"phase": "visualizing", "batch": index + 1, "batches": len(chosen), "progress": 0.97 + 0.03*(index+1)/len(chosen)})
     report["visualized_images"] = visualized; write_json(directory / "report.json", report)
-    (directory / "report.md").write_text("# WSODD 检测验收\n\n" + "\n".join(f"- {key}: {value:.6f}" for key, value in metric.items())
+    (directory / "report.md").write_text(f"# {config.data} 检测验收\n\n" + "\n".join(f"- {key}: {value:.6f}" for key, value in metric.items())
                                            + "\n\n完整 test 指标;图像左侧为 GT，右侧为预测。未设业务目标，效果待人工评审。\n", encoding="utf-8")
     return report
 

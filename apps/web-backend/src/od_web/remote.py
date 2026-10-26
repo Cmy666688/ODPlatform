@@ -192,6 +192,7 @@ def prepare(connection: Connection, directory: Path, request: dict):
                         archive.add(source, arcname=source.relative_to(paths.ROOT_DIR).as_posix())
                 bundle.with_suffix(".building").replace(bundle)
             connection.put(bundle, remote / "runs/web_jobs" / directory.name / "dataset.tar")
+            connection.put_json(document, remote / "runs/web_jobs" / directory.name / "request.json")
             connection.command(["unpack", directory.name]); targets = []
         else:
             dataset, root = load_semantic_dataset(yaml_path)

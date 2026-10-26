@@ -25,7 +25,7 @@ def test_remote_offline_blocks_cpu_draft_and_inference_without_local_fallback(we
     monkeypatch.setattr("od_web.app._hardware", lambda: {"cuda_available": False, "message": "远程 GPU 不可用"})
     monkeypatch.setattr(store, "create", lambda _: pytest.fail("断线时不能启动本机工作进程"))
     response = client.post("/api/jobs", json={"kind": "training", "require_cuda": False,
-                           "config": {"data": identifier, "device": "cpu", "scan_backend": "cpu_jit"}})
+                           "config": {"data": identifier, "device": "cpu", "scan_backend": "reference"}})
     assert response.status_code == 409 and "远程 GPU" in response.json()["detail"]
     weight = root / "models/pretrained/checkpoint_CrackMap.pth"; weight.parent.mkdir(parents=True); weight.touch()
     monkeypatch.setattr(paths, "PRETRAINED_MODELS_DIR", weight.parent)
@@ -47,8 +47,9 @@ def test_remote_inference_config_never_depends_on_local_torch(web, monkeypatch):
     assert requests[0]["config"]["device"] == "cuda" and requests[0]["config"]["scan_backend"] == "reference"
 
 
-def test_prepare_transfers_dataset_manifest_and_every_pair(web, inline_import):
+def test_prepare_transfers_dataset_manifest_and_every_pair(web, inline_import, monkeypatch):
     client, store, root = web
+    monkeypatch.setattr(paths, "PRETRAINED_MODELS_DIR", root / "models/pretrained")
     identifier = upload_template(client).json()["id"]
     directory = store.root / ("f" * 32); directory.mkdir()
     write_json(directory / "status.json", {"status": "queued", "execution": "remote", "remote_managed": True})
@@ -58,10 +59,16 @@ def test_prepare_transfers_dataset_manifest_and_every_pair(web, inline_import):
         sftp = SimpleNamespace(stat=lambda _: (_ for _ in ()).throw(FileNotFoundError()))
         def put(self, source, target): files.append((source, str(target)))
         def put_json(self, value, target): documents[str(target)] = value
-    remote.prepare(Transfer(), directory, {"kind": "training", "config": {"data": identifier, "device": "cpu"}})
-    assert len([target for _, target in files if target.endswith(".png")]) == 18
-    assert any(target.endswith("semantic_manifest.json") for _, target in files)
-    assert any(target.endswith(identifier + ".yaml") for _, target in files)
+        def command(self, arguments): assert arguments == ["unpack", directory.name]
+    remote.prepare(Transfer(), directory, {"kind": "training", "config": {"backend": "yolo", "architecture": "yolov8n.pt", "data": identifier, "device": "cpu"}})
+    import tarfile
+    assert files[0][1].endswith("dataset.tar")
+    with tarfile.open(files[0][0]) as bundle:
+        names = bundle.getnames()
+    assert len([name for name in names if name.endswith(".jpg")]) == 9
+    assert len([name for name in names if name.endswith(".txt")]) == 9
+    assert any(name.endswith("manifest.json") for name in names)
+    assert any(name.endswith(identifier + ".yaml") for name in names)
     request = documents[f"/gpu/project/runs/web_jobs/{directory.name}/request.json"]
     assert request["config"]["device"] == "cuda"
     initial = documents[f"/gpu/project/runs/web_jobs/{directory.name}/status.json"]

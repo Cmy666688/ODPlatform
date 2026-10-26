@@ -33,7 +33,7 @@ class JobRequest(BaseModel):
             config = value["config"]
             if "backend" not in config:
                 data = config.get("data", "wsodd")
-                backend = "mixercseg" if data == "crackmap" or data.startswith("ds_") else "yolo"
+                backend = "mixercseg" if data == "crackmap" else "yolo"
                 value = {**value, "config": {**config, "backend": backend}}
         return value
 

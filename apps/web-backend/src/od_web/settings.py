@@ -13,7 +13,7 @@ ROOT_URLCONF = "od_web.urls"
 INSTALLED_APPS = ["django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
                   "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles", "od_web"]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware", "django.contrib.sessions.middleware.SessionMiddleware",
-              "django.middleware.common.CommonMiddleware", "django.middleware.csrf.CsrfViewMiddleware",
+              "django.middleware.common.CommonMiddleware", "od_web.upload_limits.DatasetUploadLimit", "django.middleware.csrf.CsrfViewMiddleware",
               "django.contrib.auth.middleware.AuthenticationMiddleware", "django.contrib.messages.middleware.MessageMiddleware"]
 TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [BASE_DIR / "public"],
               "APP_DIRS": True, "OPTIONS": {"context_processors": ["django.template.context_processors.request",
@@ -26,8 +26,8 @@ STATIC_ROOT = paths.META_DIR / "web/static"
 STATICFILES_DIRS = [BASE_DIR / "public"]
 MEDIA_ROOT = paths.META_DIR / "dataset_uploads"
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024**2
-DATA_UPLOAD_MAX_MEMORY_SIZE = 8 * 1024**2
-DATA_UPLOAD_MAX_NUMBER_FILES = 20000
+DATA_UPLOAD_MAX_MEMORY_SIZE = 32 * 1024**2
+DATA_UPLOAD_MAX_NUMBER_FILES = 100000
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 100
 CSRF_FAILURE_VIEW = "od_web.views.csrf_failure"
 USE_TZ = True

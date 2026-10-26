@@ -4,7 +4,7 @@
 const datasetManager = Vue.createApp({
   data() {
     return { rows: [], name: "", mode: "archive", files: [], busy: false, progress: 0,
-      message: "", error: false, previews: [], previewName: "",
+      message: "", error: false, previews: [], previewName: "", previewClasses: [],
       labels: { ready: "已就绪", importing: "导入中", blocked: "质检需修复", failed: "导入失败" } };
   },
   computed: {
@@ -21,7 +21,7 @@ const datasetManager = Vue.createApp({
     async load() { this.rows = await api("/api/datasets"); },
     async upload() {
       this.error = false; this.message = "";
-      if (this.files.reduce((sum, file) => sum + file.size, 0) > 512 * 1024 * 1024) { this.error = true; this.message = "单次上传不能超过 512 MB。"; return; }
+      if (this.files.reduce((sum, file) => sum + file.size, 0) > 4 * 1024 * 1024 * 1024) { this.error = true; this.message = "单次上传不能超过 4 GB。"; return; }
       const form = new FormData(); form.append("name", this.name.trim()); form.append("mode", this.mode);
       for (const file of this.files) form.append("files", file);
       if (this.mode === "folder") form.append("relative_paths", JSON.stringify(this.files.map((file) => file.webkitRelativePath)));
@@ -43,7 +43,7 @@ const datasetManager = Vue.createApp({
       finally { this.busy = false; }
     },
     async preview(item) {
-      try { this.previews = await api(`/api/datasets/${item.id}/previews`); this.previewName = item.name; this.$refs.previewDialog.showModal(); }
+      try { this.previews = await api(`/api/datasets/${item.id}/previews`); this.previewName = item.name; this.previewClasses = Object.values(item.names || {}); this.$refs.previewDialog.showModal(); }
       catch (error) { toast(error.message, true); }
     },
     async inspect(item) { await selectDataset(item.id); location.hash = "data"; },

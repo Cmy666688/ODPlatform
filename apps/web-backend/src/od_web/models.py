@@ -5,6 +5,7 @@ from django.db import models
 class Dataset(models.Model):
     id = models.CharField(primary_key=True, max_length=32)
     name = models.CharField("名称", max_length=80)
+    task = models.CharField("任务类型", max_length=32, default="semantic_segment")
     source_name = models.CharField("上传来源", max_length=255, blank=True)
     status = models.CharField("状态", max_length=16, default="importing")
     phase = models.CharField("阶段", max_length=80, default="准备导入")

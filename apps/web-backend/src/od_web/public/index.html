@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=wsodd-1">
+  <link rel="stylesheet" href="/assets/styles.css?v=detect-upload-2">
   <script src="/assets/vendor/vue.global.prod.js" defer></script>
-  <script src="/assets/app.js?v=wsodd-1" defer></script>
-  <script src="/assets/datasets.js?v=wsodd-1" defer></script>
+  <script src="/assets/app.js?v=detect-upload-2" defer></script>
+  <script src="/assets/datasets.js?v=detect-upload-2" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -49,12 +49,12 @@
           <div class="page-heading"><div><div class="eyebrow">DATASET LIBRARY</div><h1>数据集管理</h1><p>上传、检查、训练，让每次实验都有清晰的数据来源。</p></div><span class="badge neutral">Django + Vue</span></div>
           <div class="dataset-workspace">
             <article class="card import-card">
-              <div class="card-heading"><div><h2>添加新数据集</h2><p>WSODD 已从本地原包接入；此上传入口用于兼容二值分割，最多 512 MB</p></div><span class="dataset-symbol">↥</span></div>
+              <div class="card-heading"><div><h2>添加新数据集</h2><p>支持多类别 VOC / YOLO 目标检测，压缩包或文件夹最大 4 GB</p></div><span class="dataset-symbol">↥</span></div>
               <form @submit.prevent="upload">
-                <label class="form-label">数据集名称<input v-model="name" placeholder="例如：道路裂缝第二批" maxlength="80" required></label>
+                <label class="form-label">数据集名称<input v-model="name" placeholder="例如：港区水域通航目标检测数据集" maxlength="80" required></label>
                 <div class="segmented import-modes"><button type="button" :class="{selected: mode === 'archive'}" @click="switchMode('archive')">压缩包上传</button><button type="button" :class="{selected: mode === 'folder'}" @click="switchMode('folder')">文件夹上传</button></div>
                 <label class="upload-zone dataset-drop" @dragover.prevent @drop.prevent="drop">
-                  <span class="upload-icon">▱</span><strong>[[ files.length ? selection : mode === 'archive' ? '选择或拖入数据集压缩包' : '选择数据集文件夹' ]]</strong><small>[[ mode === 'archive' ? 'ZIP / TAR / TAR.GZ / TGZ' : '保留文件夹层级，图像与掩膜同名配对' ]]</small>
+                  <span class="upload-icon">▱</span><strong>[[ files.length ? selection : mode === 'archive' ? '选择或拖入数据集压缩包' : '选择数据集文件夹' ]]</strong><small>[[ mode === 'archive' ? 'ZIP / TAR / TAR.GZ / TGZ' : '保留文件夹层级，图像与 XML / TXT 标注同名配对' ]]</small>
                   <input v-if="mode === 'archive'" type="file" accept=".zip,.tar,.gz,.tgz" @change="choose" :disabled="busy" hidden>
                   <input v-else type="file" webkitdirectory multiple @change="choose" :disabled="busy" hidden>
                 </label>
@@ -63,27 +63,25 @@
                 <button class="button primary" type="submit" :disabled="busy || !files.length || !name.trim()">[[ busy ? '上传中…' : '导入并运行质检' ]]</button>
               </form>
             </article>
-            <article class="card format-card"><span class="eyebrow">GET STARTED</span><h2>当前数据：WSODD</h2><p>本地原始 ZIP 已转换为 14 类 YOLO 检测标签，位于 data/processed/wsodd。按相机与采集日分组，保留完整数据身份记录。左侧上传入口仅用于兼容二值分割格式，不能上传 VOC 检测包。</p><details><summary>二值分割兼容格式</summary><pre>dataset/
-  images/
-    sample_01.jpg
-    sample_02.jpg
-  masks/
-    sample_01.png
-    sample_02.png</pre><p>没有划分时，按文件名前缀分组，以种子 42 生成约 70% / 15% / 15% 的训练、验证、测试集（至少 3 组）。</p><details><summary>已有 train / val / test？</summary><pre>images/{train,val,test}/
-masks/{train,val,test}/
-
-或 train_img/ + train_lab/
-   val_img/   + val_lab/
-   test_img/  + test_lab/</pre><p>会保留你的划分，外层允许包含一个数据集文件夹。</p></details><a href="/api/datasets/template" class="text-link" download>下载分割模板（仅供兼容流程验证） ↓</a></details></article>
+            <article class="card format-card"><span class="eyebrow">GET STARTED</span><h2>多类别目标检测数据</h2><p>上传港区船舶、浮标等通航目标的图像与框标注，自动识别类别并转换为 YOLO 检测格式。支持 WSODD 原始 VOC 压缩包。</p><details open><summary>VOC XML 格式</summary><pre>dataset/
+  JPEGImages/    # 原图
+    harbor_001.jpg
+  Annotations/  # 同名 XML 检测框
+    harbor_001.xml</pre><p>也支持 WSODD 的 image/ + annotation/，以及 images/ + annotations/。类别从 XML 的 name 读取。</p></details><details><summary>YOLO TXT 格式</summary><pre>dataset/
+  data.yaml     # names: [boat, ship, buoy]
+  images/       # 图像
+    harbor_001.jpg
+  labels/       # 同名 TXT 检测框
+    harbor_001.txt</pre><p>每行：类别 ID、中心 x、中心 y、宽、高；坐标归一化到 0–1。类别 ID 从 0 连续编号。空 TXT 表示无目标图片，缺少 TXT 会报错。</p></details><details><summary>数据划分与上传限制</summary><p>可提供 images/{train,val,test}/ + labels/{train,val,test}/，或 {train,val,test}/images/ + labels/；VOC 可提供 ImageSets/Main/{train,val,test}.txt。已有划分保持不变，三个集合均须非空。</p><p>未划分的数据按采集日或去除帧号后的文件名前缀分组，种子 42，约 70% / 15% / 15%，至少 3 组。请保留相机与场景前缀，并核对分组是否独立。</p><p>上传最大 4 GB，解压最大 12 GB、100000 个文件，单文件最大 64 MB。支持 ZIP / TAR / TAR.GZ / TGZ；不接收分类文件夹或分割掩膜。</p></details><a href="/api/datasets/template" class="text-link" download>下载港区目标检测模板（合成样本） ↓</a></article>
           </div>
           <article class="card dataset-library"><div class="card-heading"><div><h2>我的数据集</h2><p>质检就绪后，可选择数据集创建训练实验</p></div><span class="caption">[[ rows.length ]] 个数据集</span></div>
-            <div class="dataset-list"><article v-for="item in rows" :key="item.id" class="dataset-row"><div class="dataset-avatar">▤</div><div class="dataset-row-main"><div class="dataset-row-title"><strong>[[ item.name ]]</strong><span :class="['badge', item.status === 'ready' ? 'success' : item.status === 'importing' ? 'warning' : 'danger']">[[ labels[item.status] ]]</span></div><p>[[ item.available ? item.splits.train + ' 训练 · ' + item.splits.val + ' 验证 · ' + item.splits.test + ' 测试' : item.phase ]]<span v-if="item.status === 'importing'"> · [[ Math.round(item.progress * 100) ]]%</span></p><small v-if="item.error" class="risk">[[ item.error ]]</small><small v-else>[[ item.source_name ]]</small></div><div class="dataset-actions"><button class="button secondary" type="button" :disabled="!item.available" @click="preview(item)">预览</button><button class="button secondary" type="button" :disabled="!item.available" @click="inspect(item)">质检</button><button class="button primary" type="button" :disabled="!item.trainable" @click="train(item)">创建训练</button></div></article></div>
+            <div class="dataset-list"><article v-for="item in rows" :key="item.id" class="dataset-row"><div class="dataset-avatar">▤</div><div class="dataset-row-main"><div class="dataset-row-title"><strong>[[ item.name ]]</strong><span :class="['badge', item.status === 'ready' ? 'success' : item.status === 'importing' ? 'warning' : 'danger']">[[ labels[item.status] ]]</span></div><p>[[ item.available ? item.splits.train + ' 训练 · ' + item.splits.val + ' 验证 · ' + item.splits.test + ' 测试' : item.phase ]]<span v-if="item.status === 'importing'"> · [[ Math.round(item.progress * 100) ]]%</span></p><small v-if="item.error" class="risk">[[ item.error ]]</small><small v-else>[[ item.source_name ]] · [[ item.names ? Object.keys(item.names).length + ' 类目标' : '正在识别类别' ]]</small></div><div class="dataset-actions"><button class="button secondary" type="button" :disabled="!item.available" @click="preview(item)">预览</button><button class="button secondary" type="button" :disabled="!item.available" @click="inspect(item)">质检</button><button class="button primary" type="button" :disabled="!item.trainable" @click="train(item)">创建训练</button></div></article></div>
           </article>
-          <dialog ref="previewDialog" class="dataset-preview-dialog"><div class="dialog-heading"><div><span class="eyebrow">DATASET PREVIEW</span><h2>[[ previewName ]]</h2></div><button type="button" class="icon-button" @click="$refs.previewDialog.close()" aria-label="关闭预览">×</button></div><p class="body-copy">每组左侧为原图，右侧为检测框或掩膜标注。训练前请核对类别和配对关系。</p><div class="dataset-previews"><figure v-for="item in previews" :key="item.image"><div><img :src="item.image" alt="原始图像"><img :src="item.mask" alt="标注预览"></div><figcaption>[[ item.split ]] · [[ item.name ]]</figcaption></figure></div></dialog>
+          <dialog ref="previewDialog" class="dataset-preview-dialog"><div class="dialog-heading"><div><span class="eyebrow">DATASET PREVIEW</span><h2>[[ previewName ]]</h2></div><button type="button" class="icon-button" @click="$refs.previewDialog.close()" aria-label="关闭预览">×</button></div><p class="body-copy">每组左侧为原图，右侧为类别与目标框标注。训练前请核对类别和配对关系。</p><p class="caption">[[ previewClasses.join(" · ") ]]</p><div class="dataset-previews"><figure v-for="item in previews" :key="item.image"><div><img :src="item.image" alt="原始图像"><img :src="item.mask" alt="标注预览"></div><figcaption>[[ item.split ]] · [[ item.name ]]</figcaption></figure></div></dialog>
         </div>
       </section>
       <section id="page-data" class="page" hidden>
-        <div class="page-heading"><div><div class="eyebrow">DATA QUALITY</div><h1>数据质检</h1><p>检查配对、像素格式与数据身份，保留每一条风险提示。</p></div><button id="validate-data" class="button primary">重新质检</button></div>
+        <div class="page-heading"><div><div class="eyebrow">DATA QUALITY</div><h1>数据质检</h1><p>检查图像配对、类别、检测框与数据身份，保留每一条风险提示。</p></div><button id="validate-data" class="button primary">重新质检</button></div>
         <div class="metrics-grid" id="data-metrics"></div><article class="card"><div class="card-heading"><h2>检查结果</h2><span class="caption">原始数据保持不变</span></div><div id="quality-checks"></div></article><article class="card" style="margin-top:24px"><div class="card-heading"><h2>潜在同源分组</h2><span class="badge warning">待确认</span></div><p class="body-copy">同前缀文件跨集合仅代表风险线索。需要结合原图或视频采集记录确认，不能仅凭文件名判定泄漏。</p><div id="source-groups" class="group-list"></div></article>
       </section>
       <section id="page-experiments" class="page" hidden>
@@ -92,7 +90,7 @@ masks/{train,val,test}/
       </section>
       <section id="page-results" class="page" hidden>
         <div class="page-heading"><div><div class="eyebrow">VISUAL RESULTS</div><h1>结果可视化</h1><p>查看目标检测框、类别指标和独立测试集效果。</p></div><span class="badge neutral" id="result-panel-label">标注框 GT · 预测框</span></div>
-        <div class="results-grid"><article class="card"><div class="card-heading"><h2>图片推理</h2><span class="caption">PNG / JPG · 最大 20 MB</span></div><label class="upload-zone" id="upload-zone" for="image-upload"><span class="upload-icon">↥</span><strong>拖入图片，或点击上传</strong><small id="upload-description">使用 WSODD 最佳权重查看 14 类水面目标</small><input id="image-upload" type="file" accept="image/png,image/jpeg,image/bmp" hidden></label><div class="infer-controls"><label>模型<select id="infer-model"><option value="">训练完成后选择 WSODD 权重</option></select></label><label>置信度阈值 <strong id="threshold-value">0.25</strong><input id="infer-threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.25"></label><button class="button primary" id="run-inference" disabled>远程 GPU 推理</button></div><div id="infer-feedback" class="caption" aria-live="polite"></div></article><article class="card result-note"><span class="eyebrow">EVALUATION</span><h2>让效果有据可查</h2><p>完整训练结束后，自动使用验证集选出的最佳权重，在独立测试集上计算 mAP50、mAP50–95、精确率和召回率。</p><div class="result-key"><span class="key green"></span>标注框 GT<span class="key red"></span>预测框<span class="key blue"></span>按类别验收</div><p class="caption">WSODD 包含 14 类；历史分割实验仅保留在实验记录中，不作为本次检测结果。</p></article></div>
+        <div class="results-grid"><article class="card"><div class="card-heading"><h2>图片推理</h2><span class="caption">PNG / JPG · 最大 20 MB</span></div><label class="upload-zone" id="upload-zone" for="image-upload"><span class="upload-icon">↥</span><strong>拖入图片，或点击上传</strong><small id="upload-description">使用 WSODD 最佳权重查看 14 类水面目标</small><input id="image-upload" type="file" accept="image/png,image/jpeg,image/bmp" hidden></label><div class="infer-controls"><label>模型<select id="infer-model"><option value="">训练完成后选择 WSODD 权重</option></select></label><label>置信度阈值 <strong id="threshold-value">0.25</strong><input id="infer-threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.25"></label><button class="button primary" id="run-inference" disabled>远程 GPU 推理</button></div><div id="infer-feedback" class="caption" aria-live="polite"></div></article><article class="card result-note"><span class="eyebrow">EVALUATION</span><h2>让效果有据可查</h2><p>完整训练结束后，自动使用验证集选出的最佳权重，在独立测试集上计算 mAP50、mAP50–95、精确率和召回率。</p><div class="result-key"><span class="key green"></span>标注框 GT<span class="key red"></span>预测框<span class="key blue"></span>按类别验收</div><p class="caption">按当前数据集的类别独立验收；缺失类别会保留提示，测试集不参与选择最佳权重。</p></article></div>
         <article class="card gallery-card"><div class="card-heading"><div><h2>结果浏览</h2><p id="gallery-description">选择结果来源</p></div><select id="result-source" aria-label="结果来源"><option value="">等待 WSODD 实验结果</option></select></div><div id="evaluation-metrics" class="evaluation-metrics"></div><div id="gallery-tools" class="gallery-tools" hidden><label>图片<select id="gallery-image" aria-label="选择结果图片"></select></label><a id="download-result" class="button secondary" download>下载当前图片</a></div><div id="gallery-preview" class="gallery-preview"><div class="empty"><strong>暂无结果</strong><span>训练验收或图片推理完成后，结果会显示在这里。</span></div></div><div id="gallery-thumbnails" class="thumbnails"></div><div id="result-downloads" class="download-links"></div></article>
       </section>
     </main>

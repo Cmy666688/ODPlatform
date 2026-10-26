@@ -112,8 +112,8 @@ function renderOverview() {
   const monitored = state.jobs.find((job) => job.id === state.monitorId);
   const hardware = data.hardware;
   const detection = data.dataset.task === "detect";
-  $("#dataset-task").textContent = detection ? "14 类目标检测" : "二值语义分割";
-  $("#recipe-summary").innerHTML = detection ? '<span>YOLOv8n</span><span>640 × 640</span><span>AdamW</span><span>14 类目标检测</span>' : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
+  $("#dataset-task").textContent = detection ? `${Object.keys(data.dataset.names || {}).length} 类目标检测` : "二值语义分割";
+  $("#recipe-summary").innerHTML = detection ? `<span>YOLOv8n</span><span>640 × 640</span><span>AdamW</span><span>${Object.keys(data.dataset.names || {}).length} 类目标检测</span>` : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
   $("#f1-target-label").hidden = detection;
   $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
   $("#device-name").textContent = hardware.connected ? hardware.device : "远程 GPU 未连接";
@@ -149,7 +149,7 @@ function renderOverview() {
   const sources = (detection ? '<option value="">等待本数据集训练或推理结果</option>' : '<option value="reference">官方权重参考结果</option>') + completed.map((job) => `<option value="${job.id}">${esc(job.name)} · ${job.kind === "training" ? "训练验收" : "推理结果"}</option>`).join("");
   if ($("#result-source").innerHTML !== sources) { $("#result-source").innerHTML = sources; $("#result-source").value = completed.some((job) => job.id === previous) ? previous : completed[0]?.id || (detection ? "" : "reference"); }
   const modelValue = $("#infer-model").value;
-  const models = (detection ? '<option value="">训练完成后选择 WSODD 权重</option>' : '<option value="official">官方 CrackMap 参考权重</option>') + completed.filter((job) => job.kind === "training").map((job) => `<option value="trained:${job.id}">${esc(job.name)} · best</option>`).join("");
+  const models = (detection ? '<option value="">训练完成后选择该数据集权重</option>' : '<option value="official">官方 CrackMap 参考权重</option>') + completed.filter((job) => job.kind === "training").map((job) => `<option value="trained:${job.id}">${esc(job.name)} · best</option>`).join("");
   if ($("#infer-model").innerHTML !== models) { $("#infer-model").innerHTML = models; $("#infer-model").value = modelValue; if (!$("#infer-model").value && completed.some((job) => job.kind === "training")) $("#infer-model").value = `trained:${completed.find((job) => job.kind === "training").id}`; }
   $("#run-inference").disabled = !hardware.cuda_available || !state.uploadId || !$("#infer-model").value || state.jobs.some(active);
   const inferJob = state.jobs.find((job) => job.id === state.inferId);
@@ -232,7 +232,7 @@ async function showDetail(id, navigate = true) {
 
 async function loadGallery(selected) {
   const source = typeof selected === "string" ? selected : $("#result-source").value;
-  if (!source) { state.gallery = []; $("#gallery-preview").innerHTML = empty("等待 WSODD 实验结果", "远程训练和独立测试完成后，显示检测框、类别指标与曲线。"); $("#evaluation-metrics").innerHTML = ""; $("#result-downloads").innerHTML = ""; $("#gallery-tools").hidden = true; $("#gallery-thumbnails").innerHTML = ""; return; }
+  if (!source) { state.gallery = []; $("#gallery-preview").innerHTML = empty("等待该数据集实验结果", "远程训练和独立测试完成后，显示检测框、类别指标与曲线。"); $("#evaluation-metrics").innerHTML = ""; $("#result-downloads").innerHTML = ""; $("#gallery-tools").hidden = true; $("#gallery-thumbnails").innerHTML = ""; return; }
   state.source = source; $("#result-panel-label").textContent = source === "reference" || state.jobs.find((job) => job.id === source)?.kind === "training" ? "原图 · GT · 预测 · 误差" : "原图 · 概率 · 预测"; $("#evaluation-metrics").innerHTML = ""; $("#result-downloads").innerHTML = "";
   if (source === "reference") {
     const data = await api("/api/reference"); state.gallery = data.images;
@@ -345,7 +345,7 @@ $("#infer-threshold").addEventListener("input", (event) => { $("#threshold-value
 $("#run-inference").addEventListener("click", async () => {
   $("#run-inference").disabled = true;
   try {
-    const request = { kind: "inference", name: state.overview.dataset.task === "detect" ? "WSODD 水面目标检测" : "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, config: { threshold: Number($("#infer-threshold").value) } };
+    const request = { kind: "inference", name: state.overview.dataset.task === "detect" ? `${state.overview.dataset.name} · 目标检测` : "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, config: { threshold: Number($("#infer-threshold").value) } };
     const job = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
     state.inferId = job.id; $("#infer-feedback").textContent = "推理任务已提交…"; await refresh(); toast("正在生成检测或分割结果");
   } catch (error) { toast(error.message, true); renderOverview(); }

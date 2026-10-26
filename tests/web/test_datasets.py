@@ -9,7 +9,7 @@ import zipfile
 import pytest
 
 from od_platform.common import paths
-from od_platform.common.semantic import load_semantic_dataset
+import yaml
 from od_platform.data_pipeline import import_dataset
 from od_web import datasets
 from od_web.dataset_worker import run
@@ -25,8 +25,8 @@ def upload_template(client, mode="archive"):
     blob = client.get("/api/datasets/template").content
     if mode == "folder":
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
-            entries = [(name, archive.read(name)) for name in archive.namelist() if name.endswith(".png")]
-        return client.post("/api/datasets", data={"name": "道路样本", "mode": "folder", "relative_paths": json.dumps([name for name, _ in entries])},
+            entries = [(name, archive.read(name)) for name in archive.namelist() if not name.endswith("README.txt")]
+        return client.post("/api/datasets", data={"name": "港区通航样本", "mode": "folder", "relative_paths": json.dumps([name for name, _ in entries])},
                            files=[("files", (Path(name).name, content, "image/png")) for name, content in entries])
     if mode == "tar.gz":
         output = io.BytesIO()
@@ -35,7 +35,7 @@ def upload_template(client, mode="archive"):
                 data = archive.read(name); member = tarfile.TarInfo(name); member.size = len(data)
                 target.addfile(member, io.BytesIO(data))
         blob = output.getvalue()
-    return client.post("/api/datasets", data={"name": "道路样本", "mode": "archive"},
+    return client.post("/api/datasets", data={"name": "港区通航样本", "mode": "archive"},
                        files={"files": ("dataset." + ("tar.gz" if mode == "tar.gz" else "zip"), blob)})
 
 
@@ -48,9 +48,10 @@ def test_dataset_import_materializes_pairs_quality_and_previews(web, inline_impo
     assert result["status"] == "ready" and result["trainable"]
     assert result["splits"] == {"train": 7, "val": 1, "test": 1}
     identifier = result["id"]
-    document, _ = load_semantic_dataset(paths.dataset_yaml_path(identifier))
-    assert document["source"]["split_strategy"] == "grouped_seed42"
-    assert client.get("/api/overview", params={"dataset": identifier}).json()["dataset"]["name"] == "道路样本"
+    document = yaml.safe_load(paths.dataset_yaml_path(identifier).read_text(encoding="utf-8"))
+    assert document["names"] == {0: "boat", 1: "ship", 2: "buoy"}
+    assert result["task"] == "detect"
+    assert client.get("/api/overview", params={"dataset": identifier}).json()["dataset"]["name"] == "港区通航样本"
     previews = client.get(f"/api/datasets/{identifier}/previews").json()
     assert previews and client.get(previews[0]["image"]).status_code == 200
     assert client.get(previews[0]["mask"]).status_code == 200
@@ -64,10 +65,10 @@ def test_new_dataset_training_is_not_restricted_to_crackmap(web, inline_import, 
     monkeypatch.setattr(store, "create", lambda request: submitted.append(request) or {"id": "a" * 32})
     monkeypatch.setattr("od_web.app._hardware", lambda: {"cuda_available": True, "execution": "remote"})
     response = client.post("/api/jobs", json={"kind": "training", "require_cuda": False,
-                           "config": {"data": identifier, "device": "cpu", "scan_backend": "cpu_jit", "epochs": 1}})
+                           "config": {"data": identifier, "device": "cpu", "scan_backend": "reference", "epochs": 1}})
     assert response.status_code == 202, response.text
     assert submitted[0]["config"]["data"] == identifier
-    assert submitted[0]["dataset_name"] == "道路样本" and submitted[0]["dataset_fingerprint"]
+    assert submitted[0]["dataset_name"] == "港区通航样本" and submitted[0]["dataset_fingerprint"]
     assert submitted[0]["config"]["device"] == "cuda" and submitted[0]["config"]["scan_backend"] == "reference"
     assert submitted[0]["require_cuda"] is True
     assert client.post("/api/jobs", json={"kind": "training", "require_cuda": False,
@@ -77,7 +78,7 @@ def test_new_dataset_training_is_not_restricted_to_crackmap(web, inline_import, 
 def test_failed_quality_prevents_training_after_dataset_is_modified(web, inline_import, monkeypatch):
     client, store, _ = web
     identifier = upload_template(client).json()["id"]
-    next((paths.PROCESSED_DATA_DIR / identifier / "masks/train").glob("*.png")).unlink()
+    next((paths.PROCESSED_DATA_DIR / identifier / "labels/train").glob("*.txt")).unlink()
     def forbidden(*args, **kwargs): raise AssertionError("错误数据不允许训练")
     monkeypatch.setattr(store, "create", forbidden)
     response = client.post("/api/jobs", json={"kind": "training", "require_cuda": False, "config": {"data": identifier}})
@@ -108,13 +109,14 @@ def test_provided_split_is_preserved_instead_of_randomly_resplit(web, inline_imp
     with zipfile.ZipFile(io.BytesIO(original)) as source, zipfile.ZipFile(output, "w") as target:
         for index in range(9):
             split = "train" if index < 5 else "val" if index < 7 else "test"
-            for kind in ("images", "masks"):
-                target.writestr(f"custom/{kind}/{split}/sample_{index:02d}.png", source.read(f"demo/{kind}/sample_{index:02d}.png"))
+            for kind, suffix in (("images", "png"), ("labels", "txt")):
+                target.writestr(f"custom/{kind}/{split}/harbor{index:02d}_0001.{suffix}", source.read(f"demo/{kind}/harbor{index:02d}_0001.{suffix}"))
+        target.writestr("custom/data.yaml", source.read("demo/data.yaml"))
     result = client.post("/api/datasets", data={"name": "已有划分", "mode": "archive"}, files={"files": ("split.zip", output.getvalue())})
     assert result.status_code == 202, result.text
     assert result.json()["splits"] == {"train": 5, "val": 2, "test": 2}
-    document, _ = load_semantic_dataset(paths.dataset_yaml_path(result.json()["id"]))
-    assert document["source"]["split_strategy"] == "provided"
+    manifest = json.loads((paths.PROCESSED_DATA_DIR / result.json()["id"] / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["split_policy"] == "provided"
 
 
 @pytest.mark.parametrize("kind", ["zip_link", "tar_link", "too_large"])
@@ -142,7 +144,7 @@ def test_missing_annotation_is_an_import_error_not_a_trainable_dataset(web, inli
     original = client.get("/api/datasets/template").content; output = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(original)) as source, zipfile.ZipFile(output, "w") as target:
         for name in source.namelist():
-            if name != "demo/masks/sample_00.png": target.writestr(name, source.read(name))
+            if name != "demo/labels/harbor00_0001.txt": target.writestr(name, source.read(name))
     result = client.post("/api/datasets", data={"name": "缺失标注", "mode": "archive"}, files={"files": ("bad.zip", output.getvalue())})
     assert result.status_code == 422
     record = Dataset.objects.get()
@@ -154,7 +156,7 @@ def test_preview_urls_preserve_hash_percent_and_chinese_filenames(web, inline_im
     client, _, _ = web
     original = client.get("/api/datasets/template").content; output = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(original)) as source, zipfile.ZipFile(output, "w") as target:
-        for name in source.namelist(): target.writestr(name.replace("sample_", "路面#100%_"), source.read(name))
+        for name in source.namelist(): target.writestr(name.replace("harbor", "港区#100%_"), source.read(name))
     result = client.post("/api/datasets", data={"name": "中文样本", "mode": "archive"}, files={"files": ("dataset.zip", output.getvalue())})
     assert result.status_code == 202
     rows = client.get(f"/api/datasets/{result.json()['id']}/previews").json()

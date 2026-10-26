@@ -1,6 +1,6 @@
 # apps/web-backend — Django 数据集与训练工作台
 
-当前默认数据与模型为 **WSODD / YOLOv8n 水面目标检测**，具体数据划分和完整训练配方见 [WSODD 实验说明](../../docs/wsodd-training.md)。下文的二值掩膜上传格式属于兼容入口，WSODD 原始 VOC 包由本地预处理命令接入。
+当前默认数据与模型为 **WSODD / YOLOv8n 水面目标检测**，具体数据划分和完整训练配方见 [WSODD 实验说明](../../docs/wsodd-training.md)。网页现已支持多类别 VOC / YOLO 压缩包和文件夹上传。
 
 采用 Django 5.2 的路由、视图、表单、ORM、数据库迁移、CSRF 与 Admin。
 Vue 3 用于数据集管理交互，沿用现有绿色监控界面。Vue 生产文件随包提供，页面不依赖外部 CDN。
@@ -20,42 +20,36 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 启动脚本要求端口上的健康接口返回 `framework: django`，避免把旧服务误认为迁移完成。
 服务绑定本机回环地址，本版本定位为本机/实验室工作台。
 
-## 添加数据集并训练
+## 添加目标检测数据集并训练
 
-1. 在“数据集管理”填写名称，选择压缩包或文件夹。
-2. 上传后由后台进程完成解包、格式转换和 8 项数据质检。
-3. 使用“预览”核对原图与掩膜，使用“质检”查看错误及风险提示。
-4. 就绪后点击“创建训练”，选择数据集、轮次、批大小、学习率与验收目标，设备固定为远程 GPU。
-5. 在监控概览查看进度；正常训练结束后自动用 best 权重执行独立 test 验收。
-6. 在“结果可视化”选择对应实验，查看指标、掩膜对比并下载曲线、CSV、报告与权重。
+网页上传入口采用多类别目标检测,不再把新数据集转换为二值掩膜。
+支持 ZIP、TAR、TAR.GZ、TGZ 和浏览器文件夹上传。单次最大 4 GiB,后台解压最大 12 GiB、100000 个文件,
+单文件最大 64 MiB、图像最大 1600 万像素。Django 将大文件落到临时文件,接收与解包均分块读取。
+上传进度与后台解包、转换、质检进度分别显示。当前不提供断点续传。
 
-当前支持 **MixerCSeg 二值语义分割**。数据必须包含同名图像与二值掩膜，
-掩膜值为 0/1 或 0/255，不能直接把 YOLO TXT、分类图片或多类别彩色标注当作二值分割数据。
-图像支持 PNG、JPG/JPEG、BMP、TIF/TIFF。上传时会归一化为 RGB 图像和单通道二值 PNG。
+- VOC: `JPEGImages/ + Annotations/`,也支持 WSODD 的 `image/ + annotation/` 和 `images/ + annotations/`。
+  从 XML 的 object/name 生成固定且有序的类别表,检查标注尺寸与绝对像素 xyxy 框。
+- YOLO: `images/ + labels/` 配合根目录 `data.yaml`（names 列表或从零连续编号的字典）或 `classes.txt`。
+  TXT 每行仅接受 `class cx cy w h` 五列归一化坐标;空 TXT 是无目标样本,缺少 TXT 会阻断导入。
+  分割多边形、掩膜与分类目录不会当作目标检测标注接收。
+- 已划分数据支持 `images/{train,val,test}/ + labels/{train,val,test}/`、
+  `{train,val,test}/images/ + labels/`,VOC 可提供 `ImageSets/Main/{train,val,test}.txt`。
+  原划分保持不变,三个集合均须非空。当前不解析 YOLO 配置中的任意路径或图片列表。
+- 未划分时,按相机采集日或去掉末尾帧号的文件名前缀分组;相同原图合并来源组。
+  固定种子 42 搜索约 70/15/15 的组划分,至少三个组。推断分组须结合采集记录核实。
 
-支持 ZIP、TAR、TAR.GZ、TGZ，以及浏览器文件夹上传。单次总大小最多 512 MB；
-压缩包解压最多 2 GB、20000 个文件，单文件最多 64 MB、1600 万像素。
-越界路径、链接、加密 ZIP、重名路径和不完整图像/标注配对会被拒绝。
-上传内容中的 YAML、脚本等不会被当作配置执行。
+图像完整解码后转为 RGB JPEG（quality 95）;框不裁剪、不合并类别。Manifest 同时记录原件与派生文件摘要、
+类别表、划分与转换策略。相同派生图像跨集合、同组跨集合、非法框、训练类别缺失为 ERROR;
+验证或测试缺类为 WARNING,缺失类不伪造 AP。原始上传包保留。
 
-支持三种已有划分布局：
-
-```text
-images/{train,val,test}/ + masks/{train,val,test}/
-train_img/ + train_lab/，val_img/ + val_lab/，test_img/ + test_lab/
-{train,val,test}/images/ + {train,val,test}/masks/
-```
-
-也支持未划分布局 `images/ + masks/`。按文件名前缀分组，种子 42，
-约 70% / 15% / 15% 分给 train/val/test，至少需要 3 个组。
-文件名尾部 ` (数字)` 被视为可能同源的裁剪编号；这是一条分组线索，不能代替原始采集记录。
-已有划分原样保留，跨集合重复图像为 ERROR，同前缀跨集合为 WARNING。
-页面提供含 9 对合成样本的模板 ZIP，仅用于验证流程。
+选择数据集后,训练配方、类别数、监控和推理权重按当前数据集切换。训练与独立测试始终在远程 CUDA GPU 执行,
+采用 YOLOv8n,完成后回传 mAP50、mAP50–95、逐类 CSV、PR 曲线、混淆矩阵、检测框对比图及 best/last 权重。
+网页提供港区目标检测合成模板,仅验证流程,不代表业务数据或模型精度。
+历史分割数据和实验保留,不列入当前目标检测数据集列表。
 
 ## 配置远程 GPU
 
-远端先准备好与引擎兼容的 CUDA PyTorch、MixerCSeg 依赖与编译后的
-`selective_scan_cuda_oflex`。本地后端不要求 CUDA。使用已核验主机指纹的 known_hosts：
+远端先准备好 CUDA PyTorch、Ultralytics 与 Web 工作进程依赖。YOLO 检测不要求扫描内核。历史 MixerCSeg 实验才需要相应依赖和 `selective_scan_cuda_oflex`。本地后端不要求 CUDA。使用已核验主机指纹的 known_hosts：
 
 ```powershell
 python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --root /absolute/ODPlatform-web --python /absolute/venv/bin/python --extra-pythonpath /absolute/kernel-source --known-hosts /absolute/known_hosts
@@ -66,7 +60,7 @@ python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --
 主机密钥必须已在 `known_hosts` 中，未知主机不会自动信任。这些本地文件不随仓库复制。
 更新后运行 `python -m od_web.remote_setup --deploy-only` 同步源码；请在没有活动任务时更新。
 
-新任务自动上传规范化图像、掩膜、配置和原始 manifest，远端复核指纹与质检后开训。
+新检测任务自动打包上传图像、检测标签、配置和 manifest，远端复核指纹与质检后开训。
 推理自动上传所选权重和图片。训练与独立测试结束后，权重、报告、曲线、掩膜和对比图回传本机，
 同步完成才标记“已完成”。监控面板显示远程设备的实时资源数据，历史实验采样不冒充当前连接。
 
@@ -83,7 +77,7 @@ python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --
 - 训练与验收：`runs/training/`、`runs/web_jobs/`，保留原有完整训练记录。
 
 训练提交前重做质检，ERROR 阻止开训。每批更新进度，每轮保存 best/last，
-按 val mIoU 选 best，test 不参与选模，固定概率阈值并按原图尺寸统计指标。
+按验证集 detection fitness 选 best，test 不参与选模，完整测试集报告检测 AP。
 未填写业务 F1 目标时标为“待人工评审”。
 
 同一时刻执行一个训练/推理任务；关闭页面不主动停止进程。

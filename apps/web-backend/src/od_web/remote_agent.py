@@ -128,12 +128,22 @@ def unpack(job_id):
     from .jobs import JobStore
     from od_platform.data_pipeline.import_dataset import safe_relative
     import shutil
+    import re
+    from od_platform.data_pipeline.detection_import import MAX_EXPANDED, MAX_FILES
     directory = JobStore().directory(job_id)
+    request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+    identifier = request["config"]["data"]
+    if request["config"].get("backend") != "yolo" or not re.fullmatch(r"wsodd|ds_[0-9a-f]{16}", identifier):
+        raise ValueError("非法目标检测数据集 ID")
+    size = 0; seen = set()
     with tarfile.open(directory / "dataset.tar") as archive:
         for member in archive:
             relative = safe_relative(member.name)
             if not member.isfile() or member.size > 64*1024**2: raise ValueError("非法检测数据包成员")
-            if not (relative.as_posix().startswith("data/processed/wsodd/") or relative.as_posix() in ("apps/platform/configs/datasets/wsodd.yaml", "models/pretrained/yolov8n.pt")):
+            size += member.size
+            if relative in seen or len(seen) >= MAX_FILES + 3 or size > MAX_EXPANDED: raise ValueError("检测数据包重复或超过限制")
+            seen.add(relative)
+            if not (relative.as_posix().startswith(f"data/processed/{identifier}/") or relative.as_posix() in (f"apps/platform/configs/datasets/{identifier}.yaml", "models/pretrained/yolov8n.pt")):
                 raise ValueError("检测数据包路径不被允许")
             target = paths.ROOT_DIR / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -147,9 +157,9 @@ def main():
     if args.action == "hardware": result = hardware()
     elif args.action == "check":
         result = hardware()
-        importlib.import_module("od_platform.inference.mixercseg_service")
-        importlib.import_module("od_platform.training.experiment")
-        if not result["cuda_available"]: raise RuntimeError("远程 CUDA 或扫描内核未就绪")
+        importlib.import_module("ultralytics")
+        importlib.import_module("od_platform.training.detection_experiment")
+        if not result["cuda_available"]: raise RuntimeError("远程 CUDA 未就绪")
         result["runtime_ready"] = True
     elif args.action == "launch": result = launch(args.job_id)
     elif args.action == "snapshot": result = snapshot(args.job_id)

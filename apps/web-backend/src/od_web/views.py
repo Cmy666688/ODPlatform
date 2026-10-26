@@ -60,8 +60,10 @@ def health(request): return {"status": "ok", "framework": "django", "hardware": 
 
 @endpoint(["GET"])
 def config(request):
-    semantic = request.GET.get("dataset", "wsodd") != "wsodd"
+    identifier = request.GET.get("dataset", "wsodd")
+    semantic = datasets.describe(identifier)["task"] != "detect"
     defaults = load_mixercseg_config("mixercseg_full", {"device": "cuda", "scan_backend": "reference"}) if semantic else DetectionConfig()
+    defaults.data = identifier
     return {"defaults": defaults.model_dump(), "schema": (MixerCSegConfig if semantic else DetectionConfig).model_json_schema(), "execution": "remote"}
 
 
@@ -93,19 +95,20 @@ def validate(request, identifier): return datasets.validate(identifier)
 
 @endpoint(["GET"])
 def dataset_preview(request, identifier, split, filename, kind):
-    if identifier == "wsodd":
+    if datasets.describe(identifier)["task"] == "detect":
         import io
         from od_platform.common.semantic import read_bgr
         from od_platform.training.detection_experiment import draw_boxes
-        from od_platform.data_pipeline.wsodd import NAMES
+        import yaml
         import cv2
         if split not in ("train", "val", "test") or Path(filename).name != filename or not filename.endswith(".jpg") or kind not in ("images", "masks"):
             raise ApiError(404, "预览不存在")
-        root = paths.PROCESSED_DATA_DIR / "wsodd"
+        document = yaml.safe_load(datasets.dataset_yaml(identifier).read_text(encoding="utf-8"))
+        root = paths.ROOT_DIR / document["path"]
         image = root / "images" / split / filename
         if kind == "images": return FileResponse(image.open("rb"), content_type="image/jpeg")
         rows = [[float(v) for v in line.split()] for line in (root / "labels" / split / (Path(filename).stem + ".txt")).read_text().splitlines()]
-        _, encoded = cv2.imencode(".jpg", draw_boxes(read_bgr(image), rows, NAMES))
+        _, encoded = cv2.imencode(".jpg", draw_boxes(read_bgr(image), rows, document["names"]))
         return FileResponse(io.BytesIO(encoded.tobytes()), content_type="image/jpeg")
     if split not in ("train", "val", "test") or kind not in ("images", "masks"): raise ApiError(404, "预览不存在")
     from od_platform.common.semantic import load_semantic_dataset
@@ -118,10 +121,10 @@ def dataset_preview(request, identifier, split, filename, kind):
 
 @endpoint(["GET"])
 def previews(request, identifier):
-    if identifier == "wsodd":
-        root = paths.PROCESSED_DATA_DIR / "wsodd"
-        return [{"name": path.name, "split": split, "image": f"/api/datasets/wsodd/preview/images/{split}/{quote(path.name)}",
-                 "mask": f"/api/datasets/wsodd/preview/masks/{split}/{quote(path.name)}", "annotation_type": "boxes"}
+    if datasets.describe(identifier)["task"] == "detect":
+        root = paths.PROCESSED_DATA_DIR / identifier
+        return [{"name": path.name, "split": split, "image": f"/api/datasets/{identifier}/preview/images/{split}/{quote(path.name)}",
+                 "mask": f"/api/datasets/{identifier}/preview/masks/{split}/{quote(path.name)}", "annotation_type": "boxes"}
                 for split in ("train", "val", "test") for path in sorted((root / "images" / split).glob("*.jpg"))[:4]]
     from od_platform.common.semantic import load_semantic_dataset
     document, root = load_semantic_dataset(datasets.dataset_yaml(identifier))
@@ -252,17 +255,18 @@ def dataset_template(request):
     import numpy as np
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("demo/README.txt", "Synthetic binary masks for upload workflow testing only. Replace with your own images and masks.\n")
+        archive.writestr("demo/README.txt", "Synthetic harbor detection samples for workflow testing only. Each label row: class cx cy width height (normalized). Replace with real images/labels.\n")
+        archive.writestr("demo/data.yaml", "names: [boat, ship, buoy]\n")
         for index in range(9):
             rng = np.random.default_rng(index)
             image = rng.integers(150, 220, (64, 64, 3), dtype=np.uint8)
-            mask = np.zeros((64, 64), dtype=np.uint8)
-            cv2.line(mask, (8 + index * 3, 4), (30 + index * 2, 60), 255, 2)
-            image[mask > 0] = 30
-            for kind, pixels in [("images", image), ("masks", mask)]:
-                success, encoded = cv2.imencode(".png", pixels)
-                if not success: raise ValueError("模板生成失败")
-                archive.writestr(f"demo/{kind}/sample_{index:02d}.png", encoded.tobytes())
+            for x, color in [(4, (60, 90, 160)), (24, (70, 150, 60)), (44, (200, 180, 40))]:
+                cv2.rectangle(image, (x, 20), (x+12, 44), color, -1)
+            success, encoded = cv2.imencode(".png", image)
+            if not success: raise ValueError("模板生成失败")
+            stem = f"harbor{index:02d}_0001"
+            archive.writestr(f"demo/images/{stem}.png", encoded.tobytes())
+            archive.writestr(f"demo/labels/{stem}.txt", "0 0.15625 0.5 0.1875 0.375\n1 0.46875 0.5 0.1875 0.375\n2 0.78125 0.5 0.1875 0.375\n")
     response = HttpResponse(buffer.getvalue(), content_type="application/zip")
     response["Content-Disposition"] = 'attachment; filename="ODPlatform-dataset-template.zip"'
     return response

@@ -35,8 +35,10 @@ def safe_relative(name: str) -> Path:
     return Path(*value.parts)
 
 
-def extract_archive(archive: Path, destination: Path) -> None:
+def extract_archive(archive: Path, destination: Path, *, max_expanded=None, max_files=None) -> None:
     """不跟随链接,同时核对声明大小和实际读取大小。"""
+    expanded_limit = MAX_EXPANDED if max_expanded is None else max_expanded
+    file_limit = MAX_FILES if max_files is None else max_files
     destination.mkdir(parents=True, exist_ok=False)
     seen = set(); expanded = 0; count = 0
     def materialize(name, size, stream):
@@ -44,7 +46,7 @@ def extract_archive(archive: Path, destination: Path) -> None:
         relative = safe_relative(name)
         key = relative.as_posix().casefold()
         count += 1
-        if key in seen or count > MAX_FILES or size > MAX_FILE or expanded + size > MAX_EXPANDED:
+        if key in seen or count > file_limit or size > MAX_FILE or expanded + size > expanded_limit:
             raise ValueError("压缩包存在重复路径或超过文件数/解压大小限制")
         seen.add(key)
         target = destination / relative
@@ -53,14 +55,14 @@ def extract_archive(archive: Path, destination: Path) -> None:
         with target.open("xb") as output:
             while chunk := stream.read(1024 * 1024):
                 actual += len(chunk); expanded += len(chunk)
-                if actual > MAX_FILE or expanded > MAX_EXPANDED or actual > size:
+                if actual > MAX_FILE or expanded > expanded_limit or actual > size:
                     raise ValueError("解压数据超过声明大小或限制")
                 output.write(chunk)
         if actual != size:
             raise ValueError("压缩包成员大小不完整")
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as source:
-            if len(source.infolist()) > MAX_FILES * 2: raise ValueError("压缩包文件项过多")
+            if len(source.infolist()) > file_limit * 2: raise ValueError("压缩包文件项过多")
             for member in source.infolist():
                 safe_relative(member.filename.rstrip("/"))
                 mode = member.external_attr >> 16
@@ -72,7 +74,7 @@ def extract_archive(archive: Path, destination: Path) -> None:
     elif tarfile.is_tarfile(archive):
         with tarfile.open(archive, "r:*") as tar_source:
             for index, tar_member in enumerate(tar_source):
-                if index > MAX_FILES * 2: raise ValueError("压缩包文件项过多")
+                if index > file_limit * 2: raise ValueError("压缩包文件项过多")
                 if tar_member.isdir() and tar_member.name in (".", "./"): continue
                 safe_relative(tar_member.name.rstrip("/"))
                 if tar_member.isdir(): continue
