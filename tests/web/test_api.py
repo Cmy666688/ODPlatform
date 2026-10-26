@@ -88,3 +88,13 @@ def test_frontend_and_schema_are_served(web):
     assert document["defaults"]["epochs"] == 50
     assert document["defaults"]["max_train_batches"] is None
     assert "lr" in document["schema"]["properties"]
+
+
+@pytest.mark.parametrize("execution,expected", [("remote", "running"), ("local", "failed")])
+def test_pid_liveness_uses_execution_host(web, monkeypatch, execution, expected):
+    client, store, _ = web
+    job_id = "c" * 32; directory = store.root / job_id; directory.mkdir()
+    write_json(directory / "status.json", {"id": job_id, "status": "running", "execution": execution,
+               "pid": 987654321, "kind": "training", "created_at": "2026-10-26"})
+    monkeypatch.setattr("od_web.jobs.psutil.pid_exists", lambda _: False)
+    assert client.get(f"/api/jobs/{job_id}").json()["status"] == expected

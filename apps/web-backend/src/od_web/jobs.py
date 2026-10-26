@@ -43,7 +43,7 @@ class JobStore:
         process_path = directory / "process.json"
         if not state.get("pid") and process_path.exists():
             state["pid"] = json.loads(process_path.read_text(encoding="utf-8"))["pid"]
-        if state["status"] in ("queued", "running", "cancelling"):
+        if state.get("execution") != "remote" and state["status"] in ("queued", "running", "cancelling"):
             pid = state.get("pid")
             if pid and not psutil.pid_exists(pid):
                 state.update(status="failed", phase="failed", error="工作进程已退出,未写入完成结果", finished_at=utc_now())

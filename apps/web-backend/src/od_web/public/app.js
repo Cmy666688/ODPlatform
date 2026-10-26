@@ -5,7 +5,7 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { overview: null, defaults: null, jobs: [], monitorId: "", detailId: "", chart: "loss", uploadId: null, gallery: [], source: "reference", busy: false };
 const statusNames = { queued: "排队中", running: "运行中", cancelling: "正在停止", cancelled: "已停止", completed: "已完成", failed: "失败" };
-const phaseNames = { validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", inference: "推理中", completed: "已完成" };
+const phaseNames = { validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成" };
 const checkNames = { mask_pair_existence: "图像与掩膜配对", mask_decode_and_format: "解码与标注格式", mask_dimensions: "图像与掩膜尺寸", mask_alpha_channels: "Alpha 通道处理", mask_foreground_coverage: "前景覆盖率", mask_split_uniqueness: "跨集合像素重复", mask_source_group_overlap: "同源分组风险", mask_manifest_lineage: "图像与掩膜身份" };
 const active = (job) => ["queued", "running", "cancelling"].includes(job.status);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -81,10 +81,17 @@ function jobTable(jobs, limit) {
 }
 
 function renderOverview() {
-  const data = state.overview, hardware = data.hardware, split = data.dataset.splits;
+  const data = state.overview, split = data.dataset.splits;
+  const training = state.jobs.filter((job) => job.kind === "training");
+  if (!state.monitorChosen && training.length) {
+    state.monitorId = (training.find(active) || training[0]).id;
+    state.monitorChosen = true;
+  }
+  const monitored = state.jobs.find((job) => job.id === state.monitorId);
+  const hardware = monitored?.remote_hardware || data.hardware;
   $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
   $("#device-name").textContent = hardware.cuda_available ? hardware.device : "CPU / CUDA 未就绪";
-  $("#device-note").textContent = `PyTorch ${hardware.torch}`;
+  $("#device-note").textContent = `${monitored?.execution === "remote" ? "远程 GPU · " : ""}PyTorch ${hardware.torch}${monitored?.execution === "remote" && !active(monitored) ? " · 实验结束时采样" : ""}`;
   $("#gpu-badge").textContent = hardware.cuda_available ? "GPU 就绪" : "等待 GPU";
   $("#gpu-badge").className = `badge ${hardware.cuda_available ? "success" : "neutral"}`;
   $("#cpu-value").textContent = `${number(hardware.cpu_percent, 0)}%`;
@@ -95,13 +102,14 @@ function renderOverview() {
   $("#gpu-resources").hidden = !hardware.cuda_available;
   $("#gpu-utilization").textContent = hardware.gpu_percent === null || hardware.gpu_percent === undefined ? "暂不可用" : `${number(hardware.gpu_percent, 0)}%`;
   $("#gpu-memory").textContent = hardware.gpu_memory_gb ? `${hardware.gpu_memory_used_gb} / ${hardware.gpu_memory_gb} GB` : "暂不可用";
-  const readiness = hardware.cuda_available ? "CUDA 已就绪，可提交完整实验。" : "CUDA GPU 尚未就绪，完整训练暂未启动。可先保存配置、检查数据或查看参考结果。";
-  for (const selector of ["#environment-message", "#config-readiness"]) {
-    $(selector).textContent = readiness; $(selector).classList.toggle("ready", hardware.cuda_available);
-  }
-  $("#start-training").disabled = !hardware.cuda_available || state.jobs.some(active);
-  $("#start-training").textContent = hardware.cuda_available ? "开始完整训练" : "GPU 就绪后开始训练";
-  const training = state.jobs.filter((job) => job.kind === "training");
+  const readiness = data.hardware.cuda_available ? "CUDA 已就绪，可提交完整实验。" : "本机 CUDA GPU 尚未就绪，不能从本机启动新训练。";
+  $("#config-readiness").textContent = readiness;
+  $("#config-readiness").classList.toggle("ready", data.hardware.cuda_available);
+  const remoteNote = monitored?.status === "completed" ? "远程实验已结束，权重、指标和可视化已同步到本机。" : !active(monitored || {}) ? "远程实验已结束，可在实验记录中查看日志。" : Date.now() - Date.parse(monitored.synced_at) > 20000 ? "远程进度同步暂时中断，正在等待连接恢复。" : "当前实验在远程 GPU 执行，进度与产物自动同步到本机。";
+  $("#environment-message").textContent = monitored?.execution === "remote" ? remoteNote : readiness;
+  $("#environment-message").classList.toggle("ready", hardware.cuda_available);
+  $("#start-training").disabled = !data.hardware.cuda_available || state.jobs.some(active);
+  $("#start-training").textContent = data.hardware.cuda_available ? "开始完整训练" : "GPU 就绪后开始训练";
   const select = $("#monitor-job");
   const options = '<option value="">新实验 / 待启动</option>' + training.map((job) => `<option value="${job.id}">${esc(job.name)} · ${statusNames[job.status]}</option>`).join("");
   if (select.innerHTML !== options) { select.innerHTML = options; select.value = state.monitorId; }
@@ -253,7 +261,7 @@ document.addEventListener("click", async (event) => {
     if (button.hasAttribute("data-open-config")) openConfig();
     if (button.dataset.chart) { state.chart = button.dataset.chart; $$("[data-chart]").forEach((item) => item.classList.toggle("selected", item === button)); renderMonitor(); }
     if (button.dataset.detail) await showDetail(button.dataset.detail);
-    if (button.dataset.monitor) { state.monitorId = button.dataset.monitor; $("#monitor-job").value = state.monitorId; location.hash = "overview"; renderMonitor(); }
+    if (button.dataset.monitor) { state.monitorId = button.dataset.monitor; state.monitorChosen = true; $("#monitor-job").value = state.monitorId; location.hash = "overview"; renderOverview(); }
     if (button.dataset.results) { $("#result-source").value = button.dataset.results; location.hash = "results"; await loadGallery(); }
     if (button.dataset.cancel) { await api(`/api/jobs/${button.dataset.cancel}/cancel`, { method: "POST" }); toast("已请求停止，等待当前计算结束"); await refresh(); }
     if (button.dataset.log) {
@@ -266,7 +274,7 @@ document.addEventListener("click", async (event) => {
 });
 
 $("#refresh").addEventListener("click", () => refresh());
-$("#monitor-job").addEventListener("change", (event) => { state.monitorId = event.target.value; renderMonitor(); });
+$("#monitor-job").addEventListener("change", (event) => { state.monitorId = event.target.value; state.monitorChosen = true; renderOverview(); });
 $("#close-config").addEventListener("click", () => $("#config-dialog").close());
 $("#save-draft").addEventListener("click", () => { if (!$("#training-form").reportValidity()) return; state.draft = draft(); localStorage.setItem("odp-training-draft", JSON.stringify(state.draft)); $("#config-dialog").close(); renderMonitor(); toast("训练配置已保存，未启动训练"); });
 $("#training-form").addEventListener("submit", async (event) => {

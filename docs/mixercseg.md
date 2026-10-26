@@ -85,7 +85,7 @@ odp-train --backend mixercseg --config mixercseg_train
 odp-train --backend mixercseg --epochs 1 --smoke-batches 1 --no-archive
 ```
 
-本次已跑通一批真实训练、反向传播和一批验证；这不代表完成 50 epochs，
+早期验证已跑通一批真实训练、反向传播和一批验证；冒烟运行不代表完成 50 epochs，
 也不代表新的训练模型达到论文精度。本机是 CPU 版 PyTorch，PyTorch 扫描参考
 实现能运行但训练较慢；完整实验宜在 CUDA 环境进行。
 
@@ -132,10 +132,10 @@ python -m apps.desktop.main
 
 模型权重、数据集和运行结果均被 Git 忽略，不上传私有仓库。
 
-## Web 监控与待 GPU 完整实验
+## Web 监控与 GPU 完整实验
 
 完整配置 `mixercseg_full.yaml` 保留 50 epochs、512×512、batch=1 和原始优化配方。
-当前完整训练等待 GPU，不会由页面保存配置或刷新自动启动。
+完整训练需要显式提交，不会由页面保存配置或刷新自动启动。
 Web 端的 CUDA 门禁也不会自动回退到 CPU 执行完整训练。
 
 监控和训练后的自动验收见 [Web 使用说明](../apps/web-backend/README.md)。

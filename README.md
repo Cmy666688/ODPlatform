@@ -60,5 +60,5 @@ pip install -e "./apps/web-backend[workbench]"
 powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 ```
 
-面板打开 <http://127.0.0.1:8000>。完整训练等待 GPU，不会因页面刷新或保存配置而启动。
+面板打开 <http://127.0.0.1:8000>。完整训练需要 CUDA，不会因页面刷新或保存配置而启动。
 功能、任务接口和验收边界见 [Web 使用说明](apps/web-backend/README.md)。
