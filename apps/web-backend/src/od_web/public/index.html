@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=deepseek-1">
+  <link rel="stylesheet" href="/assets/styles.css?v=deepseek-2">
   <script src="/assets/vendor/vue.global.prod.js" defer></script>
   <script src="/assets/app.js?v=deepseek-1" defer></script>
-  <script src="/assets/assistant.js?v=deepseek-1" defer></script>
+  <script src="/assets/assistant.js?v=deepseek-2" defer></script>
   <script src="/assets/datasets.js?v=detect-upload-2" defer></script>
 </head>
 <body>
@@ -105,9 +105,7 @@
             <div class="assistant-prompts"><button class="button secondary" type="button" data-question="请解释当前数据集的质量风险及训练前需要核对的内容。">数据质量风险</button><button class="button secondary" type="button" data-question="当前实验进行到哪一步？请根据实际状态解释，指出还缺哪些验收证据。">实验进度解读</button><button class="button secondary" type="button" data-question="如何阅读目标检测的 mAP50、mAP50–95、精确率和召回率？">检测指标说明</button></div>
             <form id="assistant-form"><label class="form-label" for="assistant-question">你的问题<textarea id="assistant-question" rows="3" maxlength="4000" placeholder="例如：验证集缺少某个类别，会影响哪些验收结论？" required></textarea></label><div class="dialog-actions"><span class="caption" id="assistant-feedback" role="status"></span><button id="assistant-send" class="button primary" type="submit" disabled>发送给 DeepSeek</button></div></form>
           </article>
-          <article class="card assistant-settings"><span class="eyebrow">DEEPSEEK API</span><h2>本机配置</h2><p class="body-copy">在项目根目录的 <code>.env</code> 填写密钥即可使用。模板为 <code>.env.example</code>，修改后下次请求自动生效。</p><pre class="assistant-config">DEEPSEEK_API_KEY=你的密钥
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-flash</pre><p class="caption">系统环境变量优先。密钥不会显示在网页或加入 Git。</p><button id="assistant-check" class="button secondary" type="button">重新读取配置</button><div class="assistant-context-note"><h3>发送哪些信息</h3><p class="body-copy">你的问题、当前会话、所选数据集的类别与划分、质检摘要和关联实验指标会发给 DeepSeek。原图、视频、权重、SSH 信息与训练日志保留在本地或远程 GPU。</p><p class="caption">回答用于辅助理解。模型准确率以独立测试报告为准，推理图片本身不提供精度验收结论。</p></div>
+          <article class="card assistant-settings"><span class="eyebrow">DEEPSEEK</span><h2>服务状态</h2><p class="body-copy">服务凭据由后端管理，本页面仅显示是否已配置，不展示密钥或配置代码。</p><button id="assistant-check" class="button secondary" type="button">重新检查状态</button><div class="assistant-context-note"><h3>发送哪些信息</h3><p class="body-copy">你的问题、当前会话、所选数据集的类别与划分、质检摘要和关联实验指标会发给 DeepSeek。原图、视频、权重、SSH 信息与训练日志保留在本地或远程 GPU。</p><p class="caption">回答用于辅助理解。模型准确率以独立测试报告为准，推理图片本身不提供精度验收结论。</p></div>
           </article>
         </div>
       </section>

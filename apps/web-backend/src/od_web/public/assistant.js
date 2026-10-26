@@ -16,10 +16,10 @@
   async function load() {
     if (location.hash !== "#assistant" || sending) return;
     try {
-      const config = await api("/api/assistant/config"); configured = config.configured;
-      $("#assistant-status").textContent = configured ? `DeepSeek · ${config.model} · 已配置` : "DeepSeek · 待填写 API Key";
+      const config = await api("/api/assistant/config"), changed = configured !== config.configured; configured = config.configured;
+      $("#assistant-status").textContent = configured ? `DeepSeek · ${config.model} · 已配置` : "DeepSeek · 未配置";
       $("#assistant-status").className = `badge ${configured ? "success" : "warning"}`;
-      $("#assistant-feedback").textContent = configured ? "发送问题后调用 API，按 DeepSeek 账户计费。" : "请先在 .env 中填写 DEEPSEEK_API_KEY。";
+      if (changed || !$("#assistant-feedback").textContent) $("#assistant-feedback").textContent = configured ? "发送问题后调用 API，按 DeepSeek 账户计费。" : "智能助手尚未启用，请由管理员完成服务配置。";
       const options = state.jobs.filter((job) => job.config?.data === state.datasetId);
       const select = $("#assistant-job"), previous = select.value;
       select.innerHTML = '<option value="">仅使用数据质检信息</option>' + options.map((job) => `<option value="${esc(job.id)}">${esc(job.name)} · ${esc(statusNames[job.status] || job.status)}</option>`).join("");
