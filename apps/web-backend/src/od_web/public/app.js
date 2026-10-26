@@ -5,7 +5,7 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { overview: null, defaults: null, jobs: [], monitorId: "", detailId: "", chart: "loss", uploadId: null, gallery: [], source: "reference", busy: false };
 const statusNames = { queued: "排队中", running: "运行中", cancelling: "正在停止", cancelled: "已停止", completed: "已完成", failed: "失败" };
-const phaseNames = { validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成" };
+const phaseNames = { validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成", failed: "失败", cancelled: "已停止" };
 const checkNames = { mask_pair_existence: "图像与掩膜配对", mask_decode_and_format: "解码与标注格式", mask_dimensions: "图像与掩膜尺寸", mask_alpha_channels: "Alpha 通道处理", mask_foreground_coverage: "前景覆盖率", mask_split_uniqueness: "跨集合像素重复", mask_source_group_overlap: "同源分组风险", mask_manifest_lineage: "图像与掩膜身份" };
 const active = (job) => ["queued", "running", "cancelling"].includes(job.status);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

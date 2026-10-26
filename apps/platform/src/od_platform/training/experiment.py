@@ -37,8 +37,8 @@ def run_experiment(job_dir: Path) -> int:
         elif event.get("phase") == "epoch_complete":
             state["progress"] = epoch / config.epochs * 0.94
         elif event.get("phase") == "testing":
-            state["progress"] = 0.94 + event["batch"] / event["batches"] * 0.06
-        if state["progress"] > 0:
+            state["progress"] = 0.94 + (event["batch"] / event["batches"] * 0.06 if event.get("batches") else 0)
+        if state["status"] == "running" and state["progress"] > 0:
             state["eta_seconds"] = state["elapsed_seconds"] / state["progress"] * (1 - state["progress"])
         write_json(job_dir / "status.json", state)
     try:
@@ -63,7 +63,7 @@ def run_experiment(job_dir: Path) -> int:
     except (Exception, KeyboardInterrupt) as e:
         logging.exception("实验失败或被停止")
         update({"status": "cancelled" if cancelled() else "failed", "phase": "cancelled" if cancelled() else "failed",
-                "error": str(e), "finished_at": datetime.now(timezone.utc).isoformat()})
+                "error": str(e), "eta_seconds": 0, "finished_at": datetime.now(timezone.utc).isoformat()})
         return 1
 
 

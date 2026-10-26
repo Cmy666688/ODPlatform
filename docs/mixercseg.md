@@ -138,6 +138,9 @@ python -m apps.desktop.main
 完整训练需要显式提交，不会由页面保存配置或刷新自动启动。
 Web 端的 CUDA 门禁也不会自动回退到 CPU 执行完整训练。
 
+2026-10-26 已完成 RTX 4090 上的 50 轮训练和独立测试，指标、过拟合分析及测试阶段
+故障恢复记录见 [本次完整训练验收](crackmap-training-20261026.md)。
+
 监控和训练后的自动验收见 [Web 使用说明](../apps/web-backend/README.md)。
 训练过程中每批原子写入进度、逐轮保存权重；正常结束后使用 best 权重在独立 test 集
 按原图尺寸统计混淆矩阵、F1、前景 IoU、mIoU、precision 和 recall，并输出逐图 CSV、

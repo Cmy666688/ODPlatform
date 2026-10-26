@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
   <link rel="stylesheet" href="/assets/styles.css">
-  <script src="/assets/app.js?v=20261026" defer></script>
+  <script src="/assets/app.js?v=20261026-2" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -31,7 +31,7 @@
         <div class="metrics-grid">
           <article class="metric-card"><span>完成轮次</span><strong id="metric-epoch">— <small>/ 50</small></strong><div id="metric-epoch-note">完整训练</div></article>
           <article class="metric-card"><span>训练损失</span><strong id="metric-loss">—</strong><div>每轮平均损失</div></article>
-          <article class="metric-card"><span>验证集 F1</span><strong id="metric-f1">—</strong><div>固定阈值 0.5</div></article>
+          <article class="metric-card"><span>最近一轮验证 F1</span><strong id="metric-f1">—</strong><div>固定阈值 0.5 · 测试指标见结果页</div></article>
           <article class="metric-card"><span>运行时长</span><strong id="metric-time">—</strong><div id="metric-eta">启动后显示预计剩余时间</div></article>
         </div>
         <div class="monitor-grid">
