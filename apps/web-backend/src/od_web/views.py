@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from functools import wraps
-import importlib.util
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -60,7 +59,8 @@ def health(request): return {"status": "ok", "framework": "django", "hardware": 
 
 @endpoint(["GET"])
 def config(request):
-    return {"defaults": load_mixercseg_config("mixercseg_full").model_dump(), "schema": MixerCSegConfig.model_json_schema()}
+    defaults = load_mixercseg_config("mixercseg_full", {"device": "cuda", "scan_backend": "reference"})
+    return {"defaults": defaults.model_dump(), "schema": MixerCSegConfig.model_json_schema(), "execution": "remote"}
 
 
 @endpoint(["GET"])
@@ -115,13 +115,12 @@ def jobs(request):
     if request.method == "GET": return store(request).list()
     submitted = app.JobRequest(**json.loads(request.body))
     configuration = submitted.config
+    # 执行设备由服务端固定,旧草稿中的 CPU/auto 不会触发本机回退。
+    configuration.device = "cuda"; configuration.scan_backend = "reference"
+    submitted.require_cuda = True
     if submitted.kind == "training":
         if configuration.max_train_batches is not None or configuration.max_eval_batches is not None:
             raise ApiError(422, "完整实验不允许限批冒烟配置")
-        if submitted.require_cuda and not app._hardware()["cuda_available"]:
-            raise ApiError(409, "本机 CUDA GPU 尚未就绪,完整训练未启动")
-        if configuration.scan_backend == "cpu_jit" and importlib.util.find_spec("numba") is None:
-            raise ApiError(422, 'CPU 验证需要安装 pip install -e "./apps/platform[cpu]"')
         if configuration.model is not None: raise ApiError(422, "完整实验从头训练,模型路径由服务端管理")
         selected = datasets.describe(configuration.data)
         if not selected["available"] or selected["status"] != "ready": raise ApiError(422, "数据集尚未就绪或存在阻断问题")
@@ -145,11 +144,13 @@ def jobs(request):
             checkpoint = Path(trained["best_weight"]); bins = trained["config"]["hog_bins"]; data = trained["config"]["data"]
         else: raise ApiError(422, "未知模型")
         if not checkpoint.is_file(): raise ApiError(409, "所选模型权重尚未就绪")
-        hardware = app._hardware()
         configuration = load_mixercseg_config("mixercseg_infer", {"model": str(checkpoint), "hog_bins": bins,
-                         "data": data, "threshold": configuration.threshold, "device": "auto",
-                         "scan_backend": "cpu_jit" if not hardware["cuda_available"] and importlib.util.find_spec("numba") else "reference"})
+                         "data": data, "threshold": configuration.threshold, "device": "cuda",
+                         "scan_backend": "reference"})
         document = {"kind": "inference", "name": submitted.name, "config": configuration.model_dump(), "source": str(source)}
+    hardware = app._hardware()
+    if not hardware["cuda_available"]:
+        raise ApiError(409, hardware.get("message", "远程 GPU 尚未就绪,任务未启动"))
     return JsonResponse(store(request).create(document), status=202)
 
 

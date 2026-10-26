@@ -27,6 +27,11 @@ class JobRequest(BaseModel):
 
 
 def _hardware() -> dict:
+    from .remote import hardware
+    return hardware()
+
+
+def _local_hardware() -> dict:
     import torch
     cuda = torch.cuda.is_available()
     memory = psutil.virtual_memory()

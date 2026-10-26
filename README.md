@@ -61,5 +61,5 @@ pip install -e "./apps/web-backend[workbench,test]"
 powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 ```
 
-面板打开 <http://127.0.0.1:8000/#datasets>。支持上传 ZIP、TAR.GZ 或文件夹中的二值分割数据，质检后选择数据集训练并可视化。GPU 训练要求服务所在机器具备 CUDA，也可显式选择 CPU 验证；刷新和保存配置不会启动训练。
+面板打开 <http://127.0.0.1:8000/#datasets>。支持上传 ZIP、TAR.GZ 或文件夹中的二值分割数据，质检后选择数据集训练并可视化。网页训练、独立测试及图片推理统一使用配置的远程 CUDA GPU，本机负责界面、数据管理和结果展示；远程配置见 [Web 说明](apps/web-backend/README.md)。刷新和保存配置不会启动训练。
 功能、任务接口和验收边界见 [Web 使用说明](apps/web-backend/README.md)。

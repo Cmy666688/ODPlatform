@@ -46,7 +46,7 @@ with st.sidebar:
     st.caption("当前设备")
     st.text(overview["hardware"]["device"])
     if not overview["hardware"]["cuda_available"]:
-        st.info("本机 CUDA 不可用。可查看既有实验；新数据集导入与 CPU 验证请使用 Django 面板。")
+        st.info("远程 GPU 尚未就绪。可查看既有实验；连接恢复后再提交新任务。")
 
 view = st.segmented_control("工作视图", ["训练监控", "数据质量", "结果浏览"], default="训练监控")
 
@@ -63,7 +63,7 @@ if view == "训练监控":
             submitted = st.form_submit_button("开始完整实验", type="primary", disabled=not overview["hardware"]["cuda_available"])
         if submitted:
             response = post("/api/jobs", {"kind": "training", "name": name,
-                       "config": {"data": dataset, "epochs": epochs, "batch_size_train": batch, "lr": lr}, "require_cuda": True})
+                       "config": {"data": dataset, "device": "cuda", "epochs": epochs, "batch_size_train": batch, "lr": lr}, "require_cuda": True})
             if response.is_success:
                 st.session_state.selected_job = response.json()["id"]
                 st.success("任务已提交，训练完成后自动生成独立测试报告。")

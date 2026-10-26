@@ -62,11 +62,14 @@ def test_new_dataset_training_is_not_restricted_to_crackmap(web, inline_import, 
     identifier = upload_template(client).json()["id"]
     submitted = []
     monkeypatch.setattr(store, "create", lambda request: submitted.append(request) or {"id": "a" * 32})
+    monkeypatch.setattr("od_web.app._hardware", lambda: {"cuda_available": True, "execution": "remote"})
     response = client.post("/api/jobs", json={"kind": "training", "require_cuda": False,
                            "config": {"data": identifier, "device": "cpu", "scan_backend": "cpu_jit", "epochs": 1}})
     assert response.status_code == 202, response.text
     assert submitted[0]["config"]["data"] == identifier
     assert submitted[0]["dataset_name"] == "道路样本" and submitted[0]["dataset_fingerprint"]
+    assert submitted[0]["config"]["device"] == "cuda" and submitted[0]["config"]["scan_backend"] == "reference"
+    assert submitted[0]["require_cuda"] is True
     assert client.post("/api/jobs", json={"kind": "training", "require_cuda": False,
                        "config": {"data": "../../secret"}}).status_code == 422
 

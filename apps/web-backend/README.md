@@ -2,7 +2,8 @@
 
 采用 Django 5.2 的路由、视图、表单、ORM、数据库迁移、CSRF 与 Admin。
 Vue 3 用于数据集管理交互，沿用现有绿色监控界面。Vue 生产文件随包提供，页面不依赖外部 CDN。
-训练和推理继续由 `apps/platform` 引擎的独立进程执行。
+训练、独立测试和图片推理由远程 CUDA GPU 上的 `apps/platform` 独立进程执行。
+本机负责 Django 界面、数据导入与质检、结果归档；远程不可用时不回退到本机 CPU。
 
 ## 启动
 
@@ -22,7 +23,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 1. 在“数据集管理”填写名称，选择压缩包或文件夹。
 2. 上传后由后台进程完成解包、格式转换和 8 项数据质检。
 3. 使用“预览”核对原图与掩膜，使用“质检”查看错误及风险提示。
-4. 就绪后点击“创建训练”，选择数据集、计算设备、轮次、批大小、学习率与验收目标。
+4. 就绪后点击“创建训练”，选择数据集、轮次、批大小、学习率与验收目标，设备固定为远程 GPU。
 5. 在监控概览查看进度；正常训练结束后自动用 best 权重执行独立 test 验收。
 6. 在“结果可视化”选择对应实验，查看指标、掩膜对比并下载曲线、CSV、报告与权重。
 
@@ -49,10 +50,27 @@ train_img/ + train_lab/，val_img/ + val_lab/，test_img/ + test_lab/
 已有划分原样保留，跨集合重复图像为 ERROR，同前缀跨集合为 WARNING。
 页面提供含 9 对合成样本的模板 ZIP，仅用于验证流程。
 
-训练按钮使用 **Django 服务所在机器** 的设备。本机 CUDA 不可用时 GPU 训练按钮禁用；
-可显式选择“CPU 验证”，需要安装 platform 的 `cpu` extra，建议使用少量轮次检查流程。
-CPU 不会在未选择时替代 GPU。远程 GPU 的既有实验仍可展示同步状态，
-本次数据集管理不包含新建 SSH 连接或页面一键提交远程训练的功能。
+## 配置远程 GPU
+
+远端先准备好与引擎兼容的 CUDA PyTorch、MixerCSeg 依赖与编译后的
+`selective_scan_cuda_oflex`。本地后端不要求 CUDA。使用已核验主机指纹的 known_hosts：
+
+```powershell
+python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --root /absolute/ODPlatform-web --python /absolute/venv/bin/python --extra-pythonpath /absolute/kernel-source --known-hosts /absolute/known_hosts
+```
+
+首次在隐藏口令提示中输入已有 SSH 密码。安装专用 SSH 密钥后，口令不写入文件。
+连接配置与私钥保存在 Git 忽略的 `.odp-meta/web/remote.json`、`remote_gpu_key`；
+主机密钥必须已在 `known_hosts` 中，未知主机不会自动信任。这些本地文件不随仓库复制。
+更新后运行 `python -m od_web.remote_setup --deploy-only` 同步源码；请在没有活动任务时更新。
+
+新任务自动上传规范化图像、掩膜、配置和原始 manifest，远端复核指纹与质检后开训。
+推理自动上传所选权重和图片。训练与独立测试结束后，权重、报告、曲线、掩膜和对比图回传本机，
+同步完成才标记“已完成”。监控面板显示远程设备的实时资源数据，历史实验采样不冒充当前连接。
+
+任务通过 SSH 在远端独立运行。连接中断时显示同步异常并自动重连，使用同一任务 ID 和启动标记
+防止重复执行；本机同步进程意外退出后，访问实验列表会恢复同步。停止请求保存在本地，重连后补发。
+这属于监控重连，不会在远程训练进程自身崩溃后自动重训或断点续训。
 
 ## 数据和实验追溯
 
@@ -85,7 +103,7 @@ Admin：<http://127.0.0.1:8000/admin/>。管理员由使用者自行创建；没
 
 | 接口 | 用途 |
 |---|---|
-| GET /api/health | Django 标识与本机设备 |
+| GET /api/health | Django 标识与远程 GPU 连接、实时设备 |
 | GET /api/overview?dataset=<id> | 所选数据、质检、硬件和实验 |
 | GET/POST /api/datasets | 列表 / multipart 导入 |
 | GET /api/datasets/template | 下载合成样本 ZIP |
@@ -108,7 +126,7 @@ python -m build apps/web-backend
 ```
 
 验收覆盖 ZIP、TAR.GZ、文件夹、已有划分、错误标注、路径穿越、链接、大小限制及 CSRF。
-已通过真实 HTTP 上传 9 对合成样本，完成 1 轮 CPU 训练和独立测试，生成曲线、掩膜及对比图；
+已通过真实 HTTP 提交 9 对合成样本到远程 GPU，完成 1 轮训练和独立测试，再使用新权重推理并回传可视化；
 该记录仅验证功能链路，不代表业务精度。此前 CrackMap 50 轮实验见
 [完整训练报告](../../docs/crackmap-training-20261026.md)。
 

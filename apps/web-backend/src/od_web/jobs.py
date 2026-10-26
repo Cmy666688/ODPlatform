@@ -1,13 +1,10 @@
-"""本机任务管理:独立进程、持久状态、可取消与受控产物访问。"""
+"""任务登记:远程 GPU 执行、本机持久状态、取消与受控产物访问。"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 import re
-import subprocess
-import sys
 import threading
 from uuid import uuid4
 
@@ -55,7 +52,10 @@ class JobStore:
         rows = []
         for directory in self.root.iterdir():
             if directory.is_dir() and _ID.fullmatch(directory.name) and (directory / "status.json").exists():
-                rows.append(self.read(directory.name))
+                state = self.read(directory.name)
+                from .remote import ensure_bridge
+                ensure_bridge(directory, state)
+                rows.append(state)
         return sorted(rows, key=lambda row: row["created_at"], reverse=True)
 
     def create(self, request: dict) -> dict:
@@ -64,22 +64,19 @@ class JobStore:
                 raise RuntimeError("当前已有运行任务,请完成或停止后再提交")
             job_id = uuid4().hex
             directory = self.root / job_id; directory.mkdir()
-            request = {**request, "created_at": utc_now()}
+            request = {**request, "config": {**request["config"], "device": "cuda", "scan_backend": "reference"},
+                       "require_cuda": True, "created_at": utc_now()}
             write_json(directory / "request.json", request)
             state = {"id": job_id, "kind": request["kind"], "status": "queued", "phase": "queued",
                      "created_at": request["created_at"], "config": request["config"], "progress": 0.0,
+                     "execution": "remote", "remote_managed": True, "connection_status": "connecting",
                      "history": [], "name": request.get("name", "CrackMap 完整实验")}
             write_json(directory / "status.json", state)
-            environment = dict(os.environ, PYTHONUTF8="1", PYTHONUNBUFFERED="1")
-            with (directory / "worker.log").open("ab") as log:
-                try:
-                    process = subprocess.Popen([sys.executable, "-m", "od_web.worker", "--job-dir", str(directory)],
-                                               cwd=paths.ROOT_DIR, env=environment, stdout=log, stderr=log,
-                                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                except OSError as e:
-                    state.update(status="failed", error=str(e)); write_json(directory / "status.json", state)
-                    raise
-            write_json(directory / "process.json", {"pid": process.pid})
+            from .remote import start_bridge
+            try: start_bridge(directory)
+            except OSError as e:
+                state.update(status="failed", phase="failed", error=str(e)); write_json(directory / "status.json", state)
+                raise
             return self.read(job_id)
 
     def cancel(self, job_id: str) -> dict:

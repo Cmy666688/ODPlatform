@@ -6,7 +6,7 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { overview: null, defaults: null, jobs: [], monitorId: "", detailId: "", chart: "loss", uploadId: null, gallery: [], source: "reference", busy: false };
 state.datasetId = localStorage.getItem("odp-dataset") || "crackmap";
 const statusNames = { queued: "排队中", running: "运行中", cancelling: "正在停止", cancelled: "已停止", completed: "已完成", failed: "失败" };
-const phaseNames = { validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成", failed: "失败", cancelled: "已停止" };
+const phaseNames = { queued: "排队中", uploading: "上传到远程 GPU", validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成", failed: "失败", cancelled: "已停止" };
 const checkNames = { mask_pair_existence: "图像与掩膜配对", mask_decode_and_format: "解码与标注格式", mask_dimensions: "图像与掩膜尺寸", mask_alpha_channels: "Alpha 通道处理", mask_foreground_coverage: "前景覆盖率", mask_split_uniqueness: "跨集合像素重复", mask_source_group_overlap: "同源分组风险", mask_manifest_lineage: "图像与掩膜身份" };
 const active = (job) => ["queued", "running", "cancelling"].includes(job.status);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -105,30 +105,28 @@ function renderOverview() {
     state.monitorChosen = true;
   }
   const monitored = state.jobs.find((job) => job.id === state.monitorId);
-  const hardware = monitored?.remote_hardware || data.hardware;
+  const hardware = data.hardware;
   $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
-  $("#device-name").textContent = hardware.cuda_available ? hardware.device : "CPU / CUDA 未就绪";
-  $("#device-note").textContent = `${monitored?.execution === "remote" ? "远程 GPU · " : ""}PyTorch ${hardware.torch}${monitored?.execution === "remote" && !active(monitored) ? " · 实验结束时采样" : ""}`;
-  $("#gpu-badge").textContent = hardware.cuda_available ? "GPU 就绪" : "等待 GPU";
+  $("#device-name").textContent = hardware.connected ? hardware.device : "远程 GPU 未连接";
+  $("#device-note").textContent = `远程 GPU · PyTorch ${hardware.torch} · ${hardware.connected ? "实时采样" : "等待连接"}`;
+  $("#gpu-badge").textContent = hardware.cuda_available ? "远程 GPU 就绪" : "等待远程 GPU";
   $("#gpu-badge").className = `badge ${hardware.cuda_available ? "success" : "neutral"}`;
   $("#cpu-value").textContent = `${number(hardware.cpu_percent, 0)}%`;
   $("#memory-value").textContent = `${number(hardware.memory_percent, 0)}%`;
-  $("#cpu-meter").style.width = `${hardware.cpu_percent}%`;
-  $("#memory-meter").style.width = `${hardware.memory_percent}%`;
-  $("#memory-caption").textContent = `${hardware.memory_used_gb} / ${hardware.memory_gb} GB`;
+  $("#cpu-meter").style.width = `${hardware.cpu_percent || 0}%`;
+  $("#memory-meter").style.width = `${hardware.memory_percent || 0}%`;
+  $("#memory-caption").textContent = hardware.connected ? `${hardware.memory_used_gb} / ${hardware.memory_gb} GB` : "等待远程资源数据";
   $("#gpu-resources").hidden = !hardware.cuda_available;
   $("#gpu-utilization").textContent = hardware.gpu_percent === null || hardware.gpu_percent === undefined ? "暂不可用" : `${number(hardware.gpu_percent, 0)}%`;
   $("#gpu-memory").textContent = hardware.gpu_memory_gb ? `${hardware.gpu_memory_used_gb} / ${hardware.gpu_memory_gb} GB` : "暂不可用";
-  const readiness = data.hardware.cuda_available ? "CUDA 已就绪，可提交完整实验。" : "本机 CUDA GPU 尚未就绪，不能从本机启动新训练。";
+  const readiness = hardware.message || "远程 GPU 尚未就绪，任务未启动。";
   $("#config-readiness").textContent = readiness;
   $("#config-readiness").classList.toggle("ready", data.hardware.cuda_available);
-  const remoteNote = monitored?.status === "completed" ? "远程实验已结束，权重、指标和可视化已同步到本机。" : !active(monitored || {}) ? "远程实验已结束，可在实验记录中查看日志。" : Date.now() - Date.parse(monitored.synced_at) > 20000 ? "远程进度同步暂时中断，正在等待连接恢复。" : "当前实验在远程 GPU 执行，进度与产物自动同步到本机。";
-  $("#environment-message").textContent = monitored?.execution === "remote" ? remoteNote : readiness;
+  const remoteNote = monitored?.execution === "remote" && active(monitored) && monitored.connection_status === "disconnected" ? "任务连接中断，正在重连并同步；不会重复启动或切到本机执行。" : readiness;
+  $("#environment-message").textContent = remoteNote;
   $("#environment-message").classList.toggle("ready", hardware.cuda_available);
-  const cpu = $("#training-device").value === "cpu";
-  $("#start-training").disabled = (!data.hardware.cuda_available && !cpu) || state.jobs.some(active) || !data.dataset.trainable;
-  $("#start-training").textContent = !data.dataset.trainable ? "数据集尚未就绪" : cpu ? "开始 CPU 训练" : data.hardware.cuda_available ? "开始完整训练" : "GPU 就绪后开始训练";
-  if (cpu) $("#config-readiness").textContent = "已显式选择 CPU，训练速度较慢，建议少量轮次验证流程。";
+  $("#start-training").disabled = !hardware.cuda_available || state.jobs.some(active) || !data.dataset.trainable;
+  $("#start-training").textContent = !data.dataset.trainable ? "数据集尚未就绪" : hardware.cuda_available ? "开始远程 GPU 训练" : "等待远程 GPU";
   const select = $("#monitor-job");
   const options = '<option value="">新实验 / 待启动</option>' + training.map((job) => `<option value="${job.id}">${esc(job.name)} · ${statusNames[job.status]}</option>`).join("");
   if (select.innerHTML !== options) { select.innerHTML = options; select.value = state.monitorId; }
@@ -143,7 +141,7 @@ function renderOverview() {
   const modelValue = $("#infer-model").value;
   const models = '<option value="official">官方 CrackMap 参考权重</option>' + state.jobs.filter((job) => job.kind === "training" && job.status === "completed").map((job) => `<option value="trained:${job.id}">${esc(job.name)} · best</option>`).join("");
   if ($("#infer-model").innerHTML !== models) { $("#infer-model").innerHTML = models; $("#infer-model").value = modelValue; }
-  $("#run-inference").disabled = !state.uploadId || state.jobs.some(active);
+  $("#run-inference").disabled = !hardware.cuda_available || !state.uploadId || state.jobs.some(active);
   const inferJob = state.jobs.find((job) => job.id === state.inferId);
   if (inferJob) {
     $("#infer-feedback").textContent = `${statusNames[inferJob.status]}${inferJob.error ? " · " + inferJob.error : ""}`;
@@ -257,14 +255,13 @@ async function uploadImage(file) {
     const form = new FormData(); form.append("file", file);
     const data = await api("/api/uploads", { method: "POST", body: form }); state.uploadId = data.id;
     $("#upload-description").textContent = `${file.name} · ${data.width} × ${data.height}`;
-    $("#run-inference").disabled = state.jobs.some(active);
+    $("#run-inference").disabled = !state.overview.hardware.cuda_available || state.jobs.some(active);
   } catch (error) { state.uploadId = null; $("#upload-description").textContent = "上传失败，请重新选择图片"; $("#run-inference").disabled = true; toast(error.message, true); }
 }
 
 function draft() {
   const values = new FormData($("#training-form"));
-  const cpu = values.get("device") === "cpu";
-  return { name: values.get("name"), config: { ...state.defaults, data: values.get("data"), device: cpu ? "cpu" : "auto", scan_backend: cpu ? "cpu_jit" : "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: !cpu, min_f1: values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
+  return { name: values.get("name"), config: { ...state.defaults, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
 }
 
 function openConfig() {
@@ -329,7 +326,7 @@ $("#run-inference").addEventListener("click", async () => {
     const request = { kind: "inference", name: "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, config: { threshold: Number($("#infer-threshold").value) } };
     const job = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
     state.inferId = job.id; $("#infer-feedback").textContent = "推理任务已提交…"; await refresh(); toast("正在生成分割结果");
-  } catch (error) { toast(error.message, true); $("#run-inference").disabled = !state.uploadId; }
+  } catch (error) { toast(error.message, true); renderOverview(); }
 });
 $("#result-source").addEventListener("change", () => loadGallery().catch((error) => toast(error.message, true)));
 $("#gallery-image").addEventListener("change", (event) => displayImage(Number(event.target.value)));
