@@ -36,6 +36,12 @@ def test_interrupted_transfer_resumes_and_rejects_corrupt_prefix(tmp_path, monke
         def posix_rename(self, old, new): remote[new] = remote.pop(old)
     class Client:
         def exec_command(self, command, **kwargs):
+            if command.startswith("cat "):
+                output = Stream(target + ".upload", "r+b" if ">>" in command else "wb")
+                if ">>" in command: output.seek(0, 2)
+                output.channel = SimpleNamespace(shutdown_write=lambda: None)
+                status = io.BytesIO(); status.channel = SimpleNamespace(recv_exit_status=lambda: 0)
+                return output, status, io.BytesIO()
             output = io.BytesIO((hashlib.sha256(remote[target + ".upload"]).hexdigest() + " file\n").encode())
             output.channel = SimpleNamespace(recv_exit_status=lambda: 0)
             return None, output, io.BytesIO()

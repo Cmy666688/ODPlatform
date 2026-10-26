@@ -21,6 +21,23 @@ from od_platform.runtime_config.detection import DetectionConfig
 def now(): return datetime.now(timezone.utc).isoformat()
 
 
+def loss_total(value):
+    if isinstance(value, dict): return sum(loss_total(item) for item in value.values())
+    return float(value.sum().item()) if hasattr(value, "sum") else float(value)
+
+
+def epoch_record(trainer, epochs, recorded):
+    epoch = trainer.epoch + 1
+    # 上游在最终 best 验证时会再次触发回调,且 epoch 可能已经自增。
+    if epoch <= recorded or epoch > epochs: return None
+    values = trainer.metrics
+    p, r = float(values.get("metrics/precision(B)", 0)), float(values.get("metrics/recall(B)", 0))
+    return {"epoch": epoch, "train_loss": loss_total(trainer.tloss), "train_samples": len(trainer.train_loader.dataset),
+            "validation": {"loss": sum(float(v) for k, v in values.items() if k.startswith("val/")),
+            "precision": p, "recall": r, "F1": 2*p*r/(p+r) if p+r else 0, "mAP50": float(values.get("metrics/mAP50(B)", 0)),
+            "mAP50_95": float(values.get("metrics/mAP50-95(B)", 0))}}
+
+
 def metrics_summary(result):
     precision, recall, ap50, ap = [float(value) for value in result.box.mean_results()]
     return {"precision": precision, "recall": recall, "mAP50": ap50, "mAP50_95": ap,
@@ -150,13 +167,9 @@ def run(job_dir: Path) -> int:
                     update({"epoch": trainer.epoch+1, "batch": (batch_count-1)%batches+1, "batches": batches,
                             "progress": 0.94*(trainer.epoch+((batch_count-1)%batches+1)/batches)/config.epochs})
             def epoch_end(trainer):
-                if trainer.epoch+1 <= len(state["history"]): return
-                values = trainer.metrics
-                p, r = float(values.get("metrics/precision(B)", 0)), float(values.get("metrics/recall(B)", 0))
-                state["history"].append({"epoch": trainer.epoch+1, "train_loss": float(trainer.tloss.sum().item()),
-                    "train_samples": len(trainer.train_loader.dataset), "validation": {"loss": sum(float(v) for k, v in values.items() if k.startswith("val/")),
-                    "precision": p, "recall": r, "F1": 2*p*r/(p+r) if p+r else 0, "mAP50": float(values.get("metrics/mAP50(B)", 0)),
-                    "mAP50_95": float(values.get("metrics/mAP50-95(B)", 0))}})
+                record = epoch_record(trainer, config.epochs, len(state["history"]))
+                if record is None: return
+                state["history"].append(record)
                 update({"epoch": trainer.epoch+1, "phase": "training", "progress": 0.94*(trainer.epoch+1)/config.epochs})
             model.add_callback("on_train_batch_end", batch_end); model.add_callback("on_fit_epoch_end", epoch_end)
             recipe = YOLOTrainConfig(task="detect", model=config.architecture, data=str(data_yaml), device="0", epochs=config.epochs,

@@ -49,7 +49,9 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 
 ## 配置远程 GPU
 
-远端先准备好 CUDA PyTorch、Ultralytics 与 Web 工作进程依赖。YOLO 检测不要求扫描内核。历史 MixerCSeg 实验才需要相应依赖和 `selective_scan_cuda_oflex`。本地后端不要求 CUDA。使用已核验主机指纹的 known_hosts：
+远端先准备好 CUDA PyTorch、Ultralytics 与 Web 工作进程依赖。YOLO 检测不要求扫描内核。历史 MixerCSeg 实验才需要相应依赖和 `selective_scan_cuda_oflex`。本地后端不要求 CUDA。
+当前 GPU 现场使用 Ultralytics 8.4.183、NumPy 1.26.3、opencv-python 4.11.0.86、faster-coco-eval 1.8.0。
+远端无法访问 GitHub 时,应预先缓存 YOLOv8n 训练初始权重、YOLO26n AMP 检查权重及 Ultralytics 配置目录中的 Arial.ttf;中文类别还需相应 Unicode 字体。使用已核验主机指纹的 known_hosts：
 
 ```powershell
 python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --root /absolute/ODPlatform-web --python /absolute/venv/bin/python --extra-pythonpath /absolute/kernel-source --known-hosts /absolute/known_hosts
@@ -66,7 +68,7 @@ python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --
 
 任务通过 SSH 在远端独立运行。连接中断时显示同步异常并自动重连，使用同一任务 ID 和启动标记
 防止重复执行；本机同步进程意外退出后，访问实验列表会恢复同步。停止请求保存在本地，重连后补发。
-远程大包传输会依据完整内容摘要接续临时文件,完成后在远端再次计算 SHA256,校验通过才解包。
+远程大包通过连续 SSH 字节流传输,依据完整内容摘要接续临时文件;完成后在远端再次计算 SHA256,校验通过才解包。
 这属于传输与监控重连，不会在远程训练进程自身崩溃后自动重训或断点续训。
 
 ## 数据和实验追溯

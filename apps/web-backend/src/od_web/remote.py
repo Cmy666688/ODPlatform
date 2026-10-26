@@ -126,14 +126,20 @@ class Connection:
                 if previous == checksum and 0 <= size <= total: offset = size
             except FileNotFoundError: pass
             with self.sftp.open(identity, "w") as stream: stream.write(checksum)
-            with source.open("rb") as local, self.sftp.open(temporary, "r+b" if offset else "wb") as output:
-                output.set_pipelined(True); output.seek(offset); local.seek(offset)
-                if on_progress: on_progress(offset, total)
-                reported = time.monotonic()
-                while chunk := local.read(1024 * 1024):
-                    output.write(chunk); offset += len(chunk)
-                    if on_progress and time.monotonic() - reported >= 2:
-                        on_progress(offset, total); reported = time.monotonic()
+            # 大文件走连续 SSH 字节流,避免高延迟网络中逐个 SFTP 写请求的开销。
+            stdin, stdout, stderr = self.client.exec_command("cat " + (">> " if offset else "> ") + shlex.quote(temporary), timeout=60)
+            try:
+                with source.open("rb") as local:
+                    local.seek(offset)
+                    if on_progress: on_progress(offset, total)
+                    reported = time.monotonic()
+                    while chunk := local.read(1024 * 1024):
+                        stdin.write(chunk); offset += len(chunk)
+                        if on_progress and time.monotonic() - reported >= 2:
+                            on_progress(offset, total); reported = time.monotonic()
+                stdin.flush(); stdin.channel.shutdown_write()
+                if stdout.channel.recv_exit_status(): raise OSError("远程文件写入失败: " + stderr.read().decode("utf-8", "replace")[-300:])
+            finally: stdin.close()
             if self.sftp.stat(temporary).st_size != total: raise OSError("远程文件大小不完整,等待继续传输")
             _, stdout, stderr = self.client.exec_command("sha256sum " + shlex.quote(temporary), timeout=180)
             actual = stdout.read().decode().split(); error = stderr.read().decode("utf-8", "replace")

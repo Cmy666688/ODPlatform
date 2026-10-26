@@ -11,6 +11,26 @@ from od_platform.common import paths
 from od_platform.data_pipeline import wsodd
 
 
+def test_training_monitor_accepts_ultralytics_loss_dictionary_and_legacy_tensor():
+    import torch
+    from od_platform.training.detection_experiment import loss_total
+    assert loss_total({"box_loss": torch.tensor(1.), "cls_loss": torch.tensor(2.), "dfl_loss": torch.tensor(3.)}) == 6
+    assert loss_total(torch.tensor([1., 2., 3.])) == 6
+
+
+def test_final_best_validation_callback_is_not_an_extra_training_epoch():
+    from types import SimpleNamespace
+    from od_platform.training.detection_experiment import epoch_record
+    trainer = SimpleNamespace(epoch=0, tloss={"box_loss": 1., "cls_loss": 2., "dfl_loss": 3.},
+                              metrics={"metrics/mAP50(B)": .4, "metrics/mAP50-95(B)": .2},
+                              train_loader=SimpleNamespace(dataset=range(7)))
+    record = epoch_record(trainer, 1, 0)
+    assert record["epoch"] == 1 and record["train_loss"] == 6 and record["validation"]["mAP50_95"] == .2
+    assert epoch_record(trainer, 1, 1) is None
+    trainer.epoch = 1
+    assert epoch_record(trainer, 1, 1) is None
+
+
 def archive(path, *, bad_box=False, bad_size=False):
     with zipfile.ZipFile(path, "w") as target:
         for index in range(12):
