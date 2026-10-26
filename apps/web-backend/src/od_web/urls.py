@@ -8,8 +8,10 @@ from .settings import BASE_DIR, STATIC_ROOT
 urlpatterns = [
     path("", views.index), path("admin/", admin.site.urls),
     path("api/health", views.health), path("api/config", views.config), path("api/overview", views.overview),
+    path("api/assistant/config", views.assistant_config), path("api/assistant/chat", views.assistant_chat),
     path("api/datasets", views.dataset_list), path("api/datasets/template", views.dataset_template),
     path("api/datasets/<str:identifier>", views.dataset_detail),
+    path("api/datasets/<str:identifier>/history", views.quality_history),
     path("api/datasets/<str:identifier>/validate", views.validate), path("api/datasets/<str:identifier>/previews", views.previews),
     path("api/datasets/<str:identifier>/preview/<str:kind>/<str:split>/<str:filename>", views.dataset_preview),
     path("api/jobs", views.jobs), path("api/jobs/<str:job_id>", views.job),

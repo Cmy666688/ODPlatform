@@ -1403,3 +1403,23 @@ pre.log {
     min-height: 0;
   }
 }
+
+
+.assistant-grid { display:grid; grid-template-columns:minmax(0, 1.8fr) minmax(260px, 1fr); gap:24px; align-items:start }
+.assistant-grid > .card { min-width:0 }
+#page-assistant > .page-heading { flex-wrap:wrap; align-items:flex-start; gap:16px }
+#page-assistant > .page-heading > div { flex:1 1 250px }
+.assistant-settings h2 { margin:24px 0 16px }
+.assistant-settings h3 { font-size:15px; margin-bottom:12px }
+.assistant-config { white-space:pre-wrap; overflow-wrap:anywhere; background:#f5f8f9; padding:16px; border-radius:10px; font-size:12px; line-height:1.8 }
+.assistant-context-note { margin-top:28px; padding-top:20px; border-top:1px solid #edf1f4 }
+.assistant-messages { max-height:540px; overflow:auto; margin:20px 0; padding:2px }
+.assistant-turn { padding:16px 18px; border-radius:12px; background:#f5f8f9; margin:12px 0; overflow-wrap:anywhere }
+.assistant-turn.user { background:#edf7f3 }
+.assistant-turn strong { font-size:12px; color:#147d68 }
+.assistant-turn p { white-space:pre-wrap; font-size:14px; line-height:1.85; margin:8px 0 0 }
+.assistant-prompts { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px }
+.assistant-chat textarea { width:100%; resize:vertical; border:1px solid #dce6e9; border-radius:8px; padding:12px; font:inherit; color:inherit; min-height:110px; box-sizing:border-box }
+.assistant-chat .dialog-actions { align-items:center; gap:12px; flex-wrap:wrap }
+.assistant-chat .dialog-actions .caption { flex:1; min-width:160px }
+@media (max-width:1050px) { .assistant-grid { grid-template-columns:1fr } }

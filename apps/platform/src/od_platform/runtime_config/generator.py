@@ -29,11 +29,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Type, Union
+
+import yaml
 
 from od_platform.runtime_config.base import BaseConfig
 
@@ -97,7 +100,7 @@ class ConfigGenerator:
 
         # 第二道防线: 覆盖前备份
         if output_path.exists() and backup:
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             backup_path = output_path.with_name(
                 f"{output_path.name}.bak.{stamp}"
             )
@@ -225,8 +228,14 @@ class ConfigGenerator:
 
         if isinstance(value, str):
             # 含 YAML 特殊字符时加引号
-            if any(c in value for c in [":", "#", "[", "]", "{", "}"]):
-                return f'"{value}"'
+            quoted = not value or any(c in value for c in [":", "#", "[", "]", "{", "}", '"', "\\", "\n", "\r", "\t"])
+            if not quoted:
+                try:
+                    parsed = yaml.safe_load(value)
+                    quoted = not isinstance(parsed, str) or parsed != value
+                except yaml.YAMLError:
+                    quoted = True
+            if quoted: return json.dumps(value, ensure_ascii=False)
             return value
 
         if isinstance(value, (list, tuple)):
@@ -237,8 +246,7 @@ class ConfigGenerator:
             return f"[{items}]"
 
         if isinstance(value, dict):
-            # 当前没有顶层 dict 字段, 简化处理
-            return "{}"
+            return yaml.safe_dump(value, default_flow_style=True, allow_unicode=True, sort_keys=False).strip()
 
         # 数字 / 其他类型
         return str(value)

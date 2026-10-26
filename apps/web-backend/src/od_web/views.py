@@ -17,7 +17,7 @@ from od_platform.common import paths
 from od_platform.runtime_config.mixercseg import MixerCSegConfig, load_mixercseg_config
 from od_platform.runtime_config.detection import DetectionConfig
 
-from . import app, datasets
+from . import app, assistant, datasets
 from .forms import DatasetUploadForm
 from .jobs import JobStore
 
@@ -59,6 +59,21 @@ def health(request): return {"status": "ok", "framework": "django", "hardware": 
 
 
 @endpoint(["GET"])
+def assistant_config(request): return assistant.status()
+
+
+@endpoint(["POST"])
+def assistant_chat(request):
+    if len(request.body) > 128 * 1024: raise ApiError(413, "对话内容过大,请清空历史后重试")
+    document = json.loads(request.body)
+    if not isinstance(document, dict) or set(document) - {"message", "dataset", "job_id", "history"}:
+        raise ApiError(422, "对话请求格式无效")
+    evidence = assistant.context(datasets.describe(document.get("dataset", "wsodd")), store(request), document.get("job_id", ""))
+    try: return assistant.ask(document.get("message", ""), evidence, document.get("history"))
+    except assistant.ProviderError as error: raise ApiError(503, str(error)) from None
+
+
+@endpoint(["GET"])
 def config(request):
     identifier = request.GET.get("dataset", "wsodd")
     semantic = datasets.describe(identifier)["task"] != "detect"
@@ -89,8 +104,19 @@ def dataset_list(request):
 def dataset_detail(request, identifier): return datasets.describe(identifier)
 
 
-@endpoint(["POST"])
-def validate(request, identifier): return datasets.validate(identifier)
+@endpoint(["GET", "POST"])
+def validate(request, identifier):
+    if request.method == "GET": return datasets.validation_status(identifier)
+    if request.GET.get("background") == "true": return JsonResponse(datasets.launch_validation(identifier), status=202)
+    return datasets.validate(identifier)
+
+
+@endpoint(["GET"])
+def quality_history(request, identifier):
+    from od_platform.data_validation.history import listing
+    datasets.dataset_yaml(identifier)
+    return [{key: value.get(key) for key in ("report_id", "checked_at", "overall_severity", "comparison", "data_fingerprint")}
+            for value in listing(identifier)]
 
 
 @endpoint(["GET"])

@@ -54,12 +54,13 @@ function duration(seconds) {
 
 function route() {
   const name = location.hash.slice(1) || "overview";
-  const valid = ["overview", "datasets", "data", "experiments", "results"].includes(name) ? name : "overview";
+  const valid = ["overview", "datasets", "data", "experiments", "results", "assistant"].includes(name) ? name : "overview";
   $$(".page").forEach((page) => { page.hidden = page.id !== `page-${valid}`; });
   $$(".nav-link").forEach((link) => link.classList.toggle("active", link.dataset.page === valid));
-  $("#breadcrumb-title").textContent = { overview: "监控概览", datasets: "数据集管理", data: "数据质检", experiments: "实验记录", results: "结果可视化" }[valid];
+  $("#breadcrumb-title").textContent = { overview: "监控概览", datasets: "数据集管理", data: "数据质检", experiments: "实验记录", results: "结果可视化", assistant: "智能助手" }[valid];
   window.scrollTo(0, 0);
   if (valid === "results") loadGallery().catch((error) => toast(error.message, true));
+  if (valid === "data") loadQualityHistory().catch((error) => toast(error.message, true));
 }
 
 function drawChart(history) {
@@ -206,6 +207,21 @@ function renderQuality(quality) {
   $("#source-groups").innerHTML = Object.entries(groups).map(([name, splits]) => `<span>${esc(name)} · ${esc(splits.join(" / "))}</span>`).join("") || '<span>无分组风险记录</span>';
 }
 
+async function loadQualityHistory() {
+  const dataset = state.datasetId;
+  const [current, history] = await Promise.all([api(`/api/datasets/${dataset}/validate`), api(`/api/datasets/${dataset}/history`)]);
+  if (dataset !== state.datasetId) return;
+  const running = current.status === "running", button = $("#validate-data");
+  button.disabled = running; button.textContent = running ? "质检中…" : "重新质检";
+  $("#quality-progress-track").hidden = !running;
+  $("#quality-progress-bar").style.width = `${current.total ? current.completed / current.total * 100 : 0}%`;
+  $("#quality-progress-label").textContent = running ? `${current.completed} / ${current.total} 个样本` : current.status === "failed" ? current.error : `${history.length} 次记录`;
+  $("#quality-history").innerHTML = history.length ? history.slice(0, 20).map((row) => {
+    const changes = row.comparison || {}, summary = changes.baseline ? [["新增问题", changes.introduced], ["已修复", changes.resolved], ["结果变化", changes.changed], ["检查项移除", changes.removed_checks]].map(([label, values]) => `${label} ${values?.length || 0}${values?.length ? `（${values.map((name) => checkNames[name] || name).join("、")}）` : ""}`).join(" · ") : "首次留档，后续质检将与本次比较";
+    return `<div class="check-row"><div><strong>${esc(row.checked_at ? new Date(row.checked_at).toLocaleString("zh-CN") : "原始基线")}</strong><p>${esc(summary)}</p><small class="caption">${esc(row.report_id)}</small></div>${badge(row.overall_severity, row.overall_severity === "ERROR" ? "danger" : row.overall_severity === "WARNING" ? "warning" : "success")}</div>`;
+  }).join("") : empty("暂无历史快照", "重新质检后开始保留每次记录。");
+}
+
 async function refresh(silent = false) {
   if (state.busy) return;
   state.busy = true;
@@ -215,6 +231,7 @@ async function refresh(silent = false) {
     window.dispatchEvent(new CustomEvent("odp:overview", { detail: state.overview }));
     $("#connection-dot").classList.add("connected"); $("#connection-text").textContent = "服务已连接";
     renderOverview();
+    if (location.hash === "#data") await loadQualityHistory();
     if (state.detailId) await showDetail(state.detailId, false);
   } catch (error) {
     $("#connection-dot").classList.remove("connected"); $("#connection-text").textContent = "服务连接中断";
@@ -337,7 +354,7 @@ $("#training-form").addEventListener("submit", async (event) => {
 });
 $("#validate-data").addEventListener("click", async (event) => {
   const button = event.target; button.disabled = true; button.textContent = "检查中…";
-  try { await api(`/api/datasets/${state.datasetId}/validate`, { method: "POST" }); await refresh(); toast("数据质检已完成"); } catch (error) { toast(error.message, true); } finally { button.disabled = false; button.textContent = "重新质检"; }
+  try { await api(`/api/datasets/${state.datasetId}/validate?background=true`, { method: "POST" }); await loadQualityHistory(); toast("质检已在后台启动，可查看样本进度"); } catch (error) { toast(error.message, true); button.disabled = false; button.textContent = "重新质检"; }
 });
 $("#image-upload").addEventListener("change", (event) => uploadImage(event.target.files[0]));
 $("#upload-zone").addEventListener("dragover", (event) => { event.preventDefault(); $("#upload-zone").classList.add("dragging"); });

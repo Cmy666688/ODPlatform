@@ -65,6 +65,36 @@ def test_detection_pairs_groups_fingerprint_and_preview(web):
     assert client.get(previews[0]["image"]).headers["Content-Type"] == "image/jpeg"
 
 
+def test_quality_history_retains_reports_and_detects_label_change(web):
+    client, _, root = web; prepare(web)
+    baseline = client.get("/api/datasets/wsodd/history").json()
+    assert len(baseline) == 1
+    label = next((root / "data/processed/wsodd/labels").rglob("*.txt"))
+    original = label.read_bytes(); label.write_text("0 0.5 0.5 -0.1 0.2\n")
+    changed = client.post("/api/datasets/wsodd/validate").json()
+    assert "detection_boxes" in changed["comparison"]["introduced"]
+    label.write_bytes(original)
+    fixed = client.post("/api/datasets/wsodd/validate").json()
+    assert "detection_boxes" in fixed["comparison"]["resolved"]
+    assert len(client.get("/api/datasets/wsodd/history").json()) == 3
+    current = client.get("/api/datasets/wsodd/validate").json()
+    assert current["status"] == "completed" and current["completed"] == current["total"] == 12
+
+
+def test_background_quality_reuses_running_job_and_records_spawn_failure(web, monkeypatch):
+    from od_web import datasets
+    from od_platform.data_validation.history import progress
+    client, _, _ = web; prepare(web)
+    progress("wsodd", 2, 12)
+    monkeypatch.setattr(datasets.subprocess, "Popen", lambda *a, **k: pytest.fail("不能重复启动"))
+    assert client.post("/api/datasets/wsodd/validate?background=true").status_code == 202
+    progress("wsodd", 12, 12, phase="completed")
+    def failed(*args, **kwargs): raise OSError("test failure")
+    monkeypatch.setattr(datasets.subprocess, "Popen", failed)
+    assert client.post("/api/datasets/wsodd/validate?background=true").status_code == 422
+    assert client.get("/api/datasets/wsodd/validate").json()["status"] == "failed"
+
+
 @pytest.mark.parametrize("option", ["bad_box", "bad_size"])
 def test_voc_errors_are_not_silently_clipped_or_resized(web, option):
     with pytest.raises(ValueError): prepare(web, **{option: True})

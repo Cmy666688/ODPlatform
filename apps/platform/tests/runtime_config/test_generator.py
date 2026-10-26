@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 import pytest
+import yaml
 
 from od_platform.runtime_config.generator import ConfigGenerator
 from od_platform.runtime_config.train     import YOLOTrainConfig
@@ -49,6 +50,28 @@ class TestFormatValue:
 
 
 class TestGenerate:
+    @pytest.mark.parametrize("value", ["", 'harbor:"boat"', 'line1\nline2', r'C:\data\harbor', "null", "true", "001", " leading", "trailing ", "港区通航", "*anchor"])
+    def test_string_values_roundtrip_without_type_changes(self, value):
+        assert yaml.safe_load("name: " + ConfigGenerator()._format_value(value))["name"] == value
+
+    def test_nested_mapping_roundtrips(self):
+        value = {0: '船舶:"A"', 1: ["", "null", False], "path": r"C:\data"}
+        assert yaml.safe_load(ConfigGenerator()._format_value(value)) == value
+
+    def test_overwrite_preserves_original_backup(self, tmp_path):
+        out = tmp_path / "train.yaml"; out.write_text("epochs: 999\n", encoding="utf-8")
+        ConfigGenerator().generate(YOLOTrainConfig, out, overwrite=True)
+        backups = list(tmp_path.glob("train.yaml.bak.*"))
+        assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "epochs: 999\n"
+
+    def test_skip_and_no_backup_modes(self, tmp_path):
+        out = tmp_path / "train.yaml"; out.write_text("user config", encoding="utf-8")
+        generator = ConfigGenerator()
+        assert generator.generate(YOLOTrainConfig, out) is False
+        assert out.read_text() == "user config" and not list(tmp_path.glob("*.bak.*"))
+        assert generator.generate(YOLOTrainConfig, out, overwrite=True, backup=False)
+        assert not list(tmp_path.glob("*.bak.*"))
+
     def test_basic_generation(self, tmp_path):
         g = ConfigGenerator()
         out = tmp_path / "train.yaml"

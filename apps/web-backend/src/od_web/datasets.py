@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import threading
 from uuid import uuid4
 
 import psutil
@@ -16,6 +17,41 @@ from od_platform.data_pipeline.detection_import import MAX_UPLOAD, MAX_FILES
 from od_platform.data_validation.semantic import validate_semantic_dataset
 
 from .models import Dataset
+
+_VALIDATION_LOCK = threading.Lock()
+
+
+def validation_status(identifier):
+    from od_platform.data_validation.history import progress_path
+    dataset_yaml(identifier)
+    file = progress_path(identifier)
+    value = json.loads(file.read_text(encoding="utf-8")) if file.exists() else {"status": "idle", "completed": 0, "total": 0}
+    process_file = file.with_suffix(".process.json")
+    if value.get("phase") == "queued" and process_file.exists(): value["pid"] = json.loads(process_file.read_text())["pid"]
+    if value["status"] == "running" and value.get("pid") and not psutil.pid_exists(value["pid"]):
+        value.update(status="failed", error="质检进程已退出,请重新质检")
+    return value
+
+
+def launch_validation(identifier):
+    from od_platform.data_validation.history import progress, progress_path
+    with _VALIDATION_LOCK:
+        selected = describe(identifier)
+        if selected["task"] != "detect" or not selected["available"]: raise ValueError("请先导入完整的目标检测数据集")
+        current = validation_status(identifier)
+        if current["status"] == "running": return current
+        directory = progress_path(identifier).parent; directory.mkdir(parents=True, exist_ok=True)
+        progress(identifier, 0, sum(selected["splits"].values()), phase="queued")
+        try:
+            with (directory / (identifier + ".log")).open("ab") as log:
+                process = subprocess.Popen([sys.executable, "-m", "od_web.dataset_worker", "--dataset", identifier, "--validate-only"],
+                    cwd=paths.ROOT_DIR, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            from od_platform.common.json_io import write_json
+            write_json(progress_path(identifier).with_suffix(".process.json"), {"pid": process.pid})
+        except OSError:
+            progress(identifier, 0, 0, error="无法启动质检进程")
+            raise
+        return validation_status(identifier)
 
 def dataset_yaml(identifier: str) -> Path:
     if identifier not in ("crackmap", "wsodd") and not Dataset.objects.filter(pk=identifier).exists():
@@ -42,6 +78,9 @@ def describe(identifier: str) -> dict:
             if report.exists(): value["quality"] = json.loads(report.read_text(encoding="utf-8"))
             if value["quality"] and value["quality"]["overall_severity"] == "ERROR": value["status"] = "blocked"
         value["trainable"] = value["available"] and value["status"] == "ready" and bool(value["quality"])
+        if record and record.status == "importing" and record.phase == "数据质量检查":
+            current = validation_status(identifier)
+            if current.get("total"): value["progress"] = 0.85 + 0.14 * current["completed"] / current["total"]
         return value
     record = Dataset.objects.filter(pk=identifier).first()
     if record is None and identifier != "crackmap": raise ValueError("数据集不存在")

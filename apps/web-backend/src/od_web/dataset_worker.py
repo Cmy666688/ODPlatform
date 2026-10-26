@@ -29,7 +29,18 @@ def run(identifier: str, source: Path, mode: str) -> None:
         Dataset.objects.filter(pk=identifier).update(status="blocked" if report["overall_severity"] == "ERROR" else "ready",
                      phase="检查完成", progress=1, report=report, counts=counts, fingerprint=document["data_fingerprint"], error="")
     except Exception as error:
+        from od_platform.data_validation.history import progress as validation_progress
+        validation_progress(identifier, 0, 0, error=str(error))
         Dataset.objects.filter(pk=record.pk).update(status="failed", phase="导入失败", error=str(error))
+        raise
+
+
+def revalidate(identifier):
+    from od_platform.data_validation.history import progress
+    from .datasets import validate
+    try: validate(identifier)
+    except Exception as error:
+        progress(identifier, 0, 0, error=str(error))
         raise
 
 
@@ -38,5 +49,9 @@ if __name__ == "__main__":
     import django
     django.setup()
     parser = argparse.ArgumentParser(); parser.add_argument("--dataset", required=True)
-    parser.add_argument("--source", type=Path, required=True); parser.add_argument("--mode", required=True)
-    args = parser.parse_args(); run(args.dataset, args.source, args.mode)
+    parser.add_argument("--source", type=Path); parser.add_argument("--mode")
+    parser.add_argument("--validate-only", action="store_true")
+    args = parser.parse_args()
+    if args.validate_only: revalidate(args.dataset)
+    elif args.source and args.mode: run(args.dataset, args.source, args.mode)
+    else: parser.error("导入需要 --source 与 --mode")

@@ -50,7 +50,7 @@ from __future__ import annotations
 
 from argparse import Namespace
 from pathlib  import Path
-from typing   import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing   import Any, Dict, List, Mapping, Optional, Tuple, Union, Type, TypeVar
 
 # 配置类
 from od_platform.runtime_config.base   import BaseConfig
@@ -80,6 +80,28 @@ from od_platform.runtime_config.registry  import CONFIG_REGISTRY
 # ============================================================
 # 一键 build 便捷函数
 # ============================================================
+
+_Config = TypeVar("_Config", bound=BaseConfig)
+
+
+def _build_config(
+    config_class: Type[_Config], yaml_path, cli_args, *, yaml_dir=None,
+    cli_exclude=None, cli_mapping=None, extra_sources=None, track_sources=True, dry_run=False,
+) -> Tuple[Optional[_Config], ConfigMerger]:
+    """共用 YAML < 额外来源 < CLI 的加载、合并及溯源逻辑。"""
+    from od_platform.common.paths import RUNTIME_CONFIGS_DIR
+    sources = load_all_sources(yaml_path=yaml_path, yaml_dir=yaml_dir or RUNTIME_CONFIGS_DIR,
+                              cli_args=cli_args, cli_exclude=cli_exclude, cli_mapping=cli_mapping)
+    sources_list: List[Tuple[Union[ConfigSource, str], Mapping[str, Any]]] = []
+    if sources["yaml"]: sources_list.append((ConfigSource.YAML, sources["yaml"]))
+    if extra_sources: sources_list.extend(extra_sources)
+    if sources["cli"]: sources_list.append((ConfigSource.CLI, sources["cli"]))
+    merger = ConfigMerger(track_sources=track_sources)
+    if dry_run:
+        merger.preview(config_class, sources=sources_list)
+        return None, merger
+    return merger.merge(config_class, sources=sources_list), merger
+
 
 def build_train_config(
     yaml_path: Optional[Union[str, Path]] = "train.yaml",
@@ -116,34 +138,9 @@ def build_train_config(
         FileNotFoundError: YAML 文件不存在 (带修复指引)
         ValidationError:   Pydantic 字段验证失败 (已注入溯源链), dry_run=True 时不 raise
     """
-    # 延迟 import 避免循环依赖 + 让 paths.py 改动不击穿这里
-    from od_platform.common.paths import RUNTIME_CONFIGS_DIR
-
-    # 1. 加载各源
-    sources = load_all_sources(
-        yaml_path   = yaml_path,
-        yaml_dir    = yaml_dir or RUNTIME_CONFIGS_DIR,
-        cli_args    = cli_args,
-        cli_exclude = cli_exclude,
-        cli_mapping = cli_mapping,
-    )
-
-    # 2. 拼 sources list, 顺序: YAML < extra_sources < CLI
-    sources_list: List[Tuple[Union[ConfigSource, str], Mapping[str, Any]]] = []
-    if sources["yaml"]:
-        sources_list.append((ConfigSource.YAML, sources["yaml"]))
-    if extra_sources:
-        sources_list.extend(extra_sources)
-    if sources["cli"]:
-        sources_list.append((ConfigSource.CLI, sources["cli"]))
-
-    # 3. 合并 (dry_run 走 preview, 否则走 merge)
-    merger = ConfigMerger(track_sources=track_sources)
-    if dry_run:
-        merger.preview(YOLOTrainConfig, sources=sources_list)
-        return None, merger
-    config = merger.merge(YOLOTrainConfig, sources=sources_list)
-    return config, merger
+    return _build_config(YOLOTrainConfig, yaml_path, cli_args, yaml_dir=yaml_dir,
+                         cli_exclude=cli_exclude, cli_mapping=cli_mapping,
+                         extra_sources=extra_sources, track_sources=track_sources, dry_run=dry_run)
 
 
 def build_val_config(
@@ -161,30 +158,9 @@ def build_val_config(
 
     参数语义和返回值结构与 build_train_config 完全一致, 仅类型不同.
     """
-    from od_platform.common.paths import RUNTIME_CONFIGS_DIR
-
-    sources = load_all_sources(
-        yaml_path   = yaml_path,
-        yaml_dir    = yaml_dir or RUNTIME_CONFIGS_DIR,
-        cli_args    = cli_args,
-        cli_exclude = cli_exclude,
-        cli_mapping = cli_mapping,
-    )
-
-    sources_list: List[Tuple[Union[ConfigSource, str], Mapping[str, Any]]] = []
-    if sources["yaml"]:
-        sources_list.append((ConfigSource.YAML, sources["yaml"]))
-    if extra_sources:
-        sources_list.extend(extra_sources)
-    if sources["cli"]:
-        sources_list.append((ConfigSource.CLI, sources["cli"]))
-
-    merger = ConfigMerger(track_sources=track_sources)
-    if dry_run:
-        merger.preview(YOLOValConfig, sources=sources_list)
-        return None, merger
-    config = merger.merge(YOLOValConfig, sources=sources_list)
-    return config, merger
+    return _build_config(YOLOValConfig, yaml_path, cli_args, yaml_dir=yaml_dir,
+                         cli_exclude=cli_exclude, cli_mapping=cli_mapping,
+                         extra_sources=extra_sources, track_sources=track_sources, dry_run=dry_run)
 
 
 def build_infer_config(
@@ -210,30 +186,9 @@ def build_infer_config(
         )
         model.predict(**config.to_ultralytics_kwargs())
     """
-    from od_platform.common.paths import RUNTIME_CONFIGS_DIR
-
-    sources = load_all_sources(
-        yaml_path   = yaml_path,
-        yaml_dir    = yaml_dir or RUNTIME_CONFIGS_DIR,
-        cli_args    = cli_args,
-        cli_exclude = cli_exclude,
-        cli_mapping = cli_mapping,
-    )
-
-    sources_list: List[Tuple[Union[ConfigSource, str], Mapping[str, Any]]] = []
-    if sources["yaml"]:
-        sources_list.append((ConfigSource.YAML, sources["yaml"]))
-    if extra_sources:
-        sources_list.extend(extra_sources)
-    if sources["cli"]:
-        sources_list.append((ConfigSource.CLI, sources["cli"]))
-
-    merger = ConfigMerger(track_sources=track_sources)
-    if dry_run:
-        merger.preview(YOLOInferConfig, sources=sources_list)
-        return None, merger
-    config = merger.merge(YOLOInferConfig, sources=sources_list)
-    return config, merger
+    return _build_config(YOLOInferConfig, yaml_path, cli_args, yaml_dir=yaml_dir,
+                         cli_exclude=cli_exclude, cli_mapping=cli_mapping,
+                         extra_sources=extra_sources, track_sources=track_sources, dry_run=dry_run)
 
 
 # ============================================================

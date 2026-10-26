@@ -47,6 +47,20 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 网页提供港区目标检测合成模板,仅验证流程,不代表业务数据或模型精度。
 历史分割数据和实验保留,不列入当前目标检测数据集列表。
 
+## 配置 DeepSeek 智能助手
+
+参照仓库根目录 `.env.example`，复制为 `.env`，填写 `DEEPSEEK_API_KEY`。
+`DEEPSEEK_BASE_URL=https://api.deepseek.com`，`DEEPSEEK_MODEL=deepseek-flash`；
+也可选择 `deepseek-v4-pro`。调用格式依据 [DeepSeek 官方文档](https://api-docs.deepseek.com/)。
+系统环境变量优先；服务按请求重新读取 `.env`，无需重启正在上传或训练的服务。
+密钥留空时，网页“智能助手”显示待配置，不产生 API 请求；不会伪造模型回答。
+网页仅返回配置状态，API Key 不进入返回内容、日志或 Git，也不会上传远程 GPU。
+后端使用固定的 DeepSeek 官方 HTTPS 地址；不接受网页自定义代理地址。
+
+助手发送当前会话、所选数据集的类别/划分/质检摘要、关联实验最近五轮指标及独立测试报告。
+不发送原图、视频、权重、SSH 信息和训练日志。回答为纯文本，按 DeepSeek 账户实际调用计费。
+当前完成的是数据与实验问答；视频检测后自动解释仍需接通视频任务与摘要，不能将此入口视为视频链路已验收。
+
 ## 配置远程 GPU
 
 远端先准备好 CUDA PyTorch、Ultralytics 与 Web 工作进程依赖。YOLO 检测不要求扫描内核。历史 MixerCSeg 实验才需要相应依赖和 `selective_scan_cuda_oflex`。本地后端不要求 CUDA。
@@ -78,6 +92,8 @@ python -m od_web.remote_setup --host GPU_HOST --port SSH_PORT --username root --
 - 标准化数据：`data/processed/ds_<id>/`；运行时配置：`apps/platform/configs/datasets/ds_<id>.yaml`。
 - 检测契约：`data/processed/ds_<id>/manifest.json`，包含原件和派生图像/标签摘要、类别与划分身份。
 - 训练与验收：`runs/training/`、`runs/web_jobs/`，保留原有完整训练记录。
+- 检测质检历史：`runs/data_validation/<id>/history/`，每次报告独立快照，比较新增、修复、变化与移除的检查项。
+  网页重新质检在独立进程运行，显示已检查样本数与总数；失败后可重试。比较粒度为检查项，不承诺逐个目标的问题追踪。
 
 训练提交前重做质检，ERROR 阻止开训。每批更新进度，每轮保存 best/last，
 按验证集 detection fitness 选 best，test 不参与选模，完整测试集报告检测 AP。

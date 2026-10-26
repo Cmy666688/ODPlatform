@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=detect-upload-2">
+  <link rel="stylesheet" href="/assets/styles.css?v=deepseek-1">
   <script src="/assets/vendor/vue.global.prod.js" defer></script>
-  <script src="/assets/app.js?v=detect-upload-2" defer></script>
+  <script src="/assets/app.js?v=deepseek-1" defer></script>
+  <script src="/assets/assistant.js?v=deepseek-1" defer></script>
   <script src="/assets/datasets.js?v=detect-upload-2" defer></script>
 </head>
 <body>
@@ -20,6 +21,7 @@
       <a href="#data" data-page="data" class="nav-link"><span class="nav-icon">▤</span>数据质检<span id="data-dot" class="nav-dot"></span></a>
       <a href="#experiments" data-page="experiments" class="nav-link"><span class="nav-icon">⌁</span>实验记录</a>
       <a href="#results" data-page="results" class="nav-link"><span class="nav-icon">▧</span>结果可视化</a>
+      <a href="#assistant" data-page="assistant" class="nav-link"><span class="nav-icon">◇</span>智能助手</a>
     </nav>
     <div class="sidebar-note"><span class="tiny-label">当前项目</span><strong>水面目标检测</strong><span>Django + Vue / YOLOv8 · WSODD</span></div>
     <footer class="sidebar-footer"><span class="connection-dot" id="connection-dot"></span><span id="connection-text">正在连接服务</span><small>本地工作区</small></footer>
@@ -83,6 +85,7 @@
       <section id="page-data" class="page" hidden>
         <div class="page-heading"><div><div class="eyebrow">DATA QUALITY</div><h1>数据质检</h1><p>检查图像配对、类别、检测框与数据身份，保留每一条风险提示。</p></div><button id="validate-data" class="button primary">重新质检</button></div>
         <div class="metrics-grid" id="data-metrics"></div><article class="card"><div class="card-heading"><h2>检查结果</h2><span class="caption">原始数据保持不变</span></div><div id="quality-checks"></div></article><article class="card" style="margin-top:24px"><div class="card-heading"><h2>潜在同源分组</h2><span class="badge warning">待确认</span></div><p class="body-copy">同前缀文件跨集合仅代表风险线索。需要结合原图或视频采集记录确认，不能仅凭文件名判定泄漏。</p><div id="source-groups" class="group-list"></div></article>
+        <article class="card" style="margin-top:24px"><div class="card-heading"><div><h2>质检历史</h2><p>按检查项比较新增、修复和变化；每次报告独立保留。</p></div><span id="quality-progress-label" class="caption" role="status">读取记录</span></div><div class="progress-track" id="quality-progress-track" hidden><i id="quality-progress-bar"></i></div><div id="quality-history"></div></article>
       </section>
       <section id="page-experiments" class="page" hidden>
         <div class="page-heading"><div><div class="eyebrow">EXPERIMENTS</div><h1>实验记录</h1><p>任务在后台独立运行，关闭页面后仍会继续。</p></div><button class="button primary" data-open-config>＋ 训练配置</button></div>
@@ -92,6 +95,21 @@
         <div class="page-heading"><div><div class="eyebrow">VISUAL RESULTS</div><h1>结果可视化</h1><p>查看目标检测框、类别指标和独立测试集效果。</p></div><span class="badge neutral" id="result-panel-label">标注框 GT · 预测框</span></div>
         <div class="results-grid"><article class="card"><div class="card-heading"><h2>图片推理</h2><span class="caption">PNG / JPG · 最大 20 MB</span></div><label class="upload-zone" id="upload-zone" for="image-upload"><span class="upload-icon">↥</span><strong>拖入图片，或点击上传</strong><small id="upload-description">使用 WSODD 最佳权重查看 14 类水面目标</small><input id="image-upload" type="file" accept="image/png,image/jpeg,image/bmp" hidden></label><div class="infer-controls"><label>模型<select id="infer-model"><option value="">训练完成后选择 WSODD 权重</option></select></label><label>置信度阈值 <strong id="threshold-value">0.25</strong><input id="infer-threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.25"></label><button class="button primary" id="run-inference" disabled>远程 GPU 推理</button></div><div id="infer-feedback" class="caption" aria-live="polite"></div></article><article class="card result-note"><span class="eyebrow">EVALUATION</span><h2>让效果有据可查</h2><p>完整训练结束后，自动使用验证集选出的最佳权重，在独立测试集上计算 mAP50、mAP50–95、精确率和召回率。</p><div class="result-key"><span class="key green"></span>标注框 GT<span class="key red"></span>预测框<span class="key blue"></span>按类别验收</div><p class="caption">按当前数据集的类别独立验收；缺失类别会保留提示，测试集不参与选择最佳权重。</p></article></div>
         <article class="card gallery-card"><div class="card-heading"><div><h2>结果浏览</h2><p id="gallery-description">选择结果来源</p></div><select id="result-source" aria-label="结果来源"><option value="">等待 WSODD 实验结果</option></select></div><div id="evaluation-metrics" class="evaluation-metrics"></div><div id="gallery-tools" class="gallery-tools" hidden><label>图片<select id="gallery-image" aria-label="选择结果图片"></select></label><a id="download-result" class="button secondary" download>下载当前图片</a></div><div id="gallery-preview" class="gallery-preview"><div class="empty"><strong>暂无结果</strong><span>训练验收或图片推理完成后，结果会显示在这里。</span></div></div><div id="gallery-thumbnails" class="thumbnails"></div><div id="result-downloads" class="download-links"></div></article>
+      </section>
+      <section id="page-assistant" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">PROJECT ASSISTANT</div><h1>智能助手</h1><p>结合当前数据与实验，解释训练过程和检测结果。</p></div><span class="badge neutral" id="assistant-status">读取 DeepSeek 配置</span></div>
+        <div class="assistant-grid">
+          <article class="card assistant-chat"><div class="card-heading"><div><h2>实验解读</h2><p id="assistant-dataset">当前数据集</p></div><button class="button secondary" id="assistant-clear" type="button">清空对话</button></div>
+            <label class="form-label">关联实验<select id="assistant-job"><option value="">仅使用数据质检信息</option></select></label>
+            <div id="assistant-messages" class="assistant-messages" aria-live="polite"><p class="body-copy">选择实验后，可以询问指标含义、数据质量或下一步验收方法。</p></div>
+            <div class="assistant-prompts"><button class="button secondary" type="button" data-question="请解释当前数据集的质量风险及训练前需要核对的内容。">数据质量风险</button><button class="button secondary" type="button" data-question="当前实验进行到哪一步？请根据实际状态解释，指出还缺哪些验收证据。">实验进度解读</button><button class="button secondary" type="button" data-question="如何阅读目标检测的 mAP50、mAP50–95、精确率和召回率？">检测指标说明</button></div>
+            <form id="assistant-form"><label class="form-label" for="assistant-question">你的问题<textarea id="assistant-question" rows="3" maxlength="4000" placeholder="例如：验证集缺少某个类别，会影响哪些验收结论？" required></textarea></label><div class="dialog-actions"><span class="caption" id="assistant-feedback" role="status"></span><button id="assistant-send" class="button primary" type="submit" disabled>发送给 DeepSeek</button></div></form>
+          </article>
+          <article class="card assistant-settings"><span class="eyebrow">DEEPSEEK API</span><h2>本机配置</h2><p class="body-copy">在项目根目录的 <code>.env</code> 填写密钥即可使用。模板为 <code>.env.example</code>，修改后下次请求自动生效。</p><pre class="assistant-config">DEEPSEEK_API_KEY=你的密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-flash</pre><p class="caption">系统环境变量优先。密钥不会显示在网页或加入 Git。</p><button id="assistant-check" class="button secondary" type="button">重新读取配置</button><div class="assistant-context-note"><h3>发送哪些信息</h3><p class="body-copy">你的问题、当前会话、所选数据集的类别与划分、质检摘要和关联实验指标会发给 DeepSeek。原图、视频、权重、SSH 信息与训练日志保留在本地或远程 GPU。</p><p class="caption">回答用于辅助理解。模型准确率以独立测试报告为准，推理图片本身不提供精度验收结论。</p></div>
+          </article>
+        </div>
       </section>
     </main>
     <footer class="page-footer"><span>ODPlatform</span><span>YOLOv8 / WSODD 水面目标检测工作台</span></footer>

@@ -119,6 +119,7 @@ def prepare(archive: Path):
 
 
 def validate(yaml_path: Path, *, use_cache=False):
+    from od_platform.data_validation.history import progress, save_report
     document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     root = paths.ROOT_DIR / document["path"]; manifest = json.loads((paths.ROOT_DIR / document["manifest_path"]).read_text(encoding="utf-8"))
     from od_platform.data_pipeline.detection_import import class_names
@@ -130,9 +131,10 @@ def validate(yaml_path: Path, *, use_cache=False):
     refreshed = {}
     rows = []; issues = []; groups = defaultdict(set); hashes = defaultdict(set); counts: dict[str, Counter] = {s: Counter() for s in SPLITS}
     expected = {(row["split"], row["stem"]) for row in manifest["samples"]}
+    total = len(manifest["samples"]); progress(identifier, 0, total)
     actual = {(s, p.stem) for s in SPLITS for p in (root / "images" / s).glob("*.jpg")}
     labels = {(s, p.stem) for s in SPLITS for p in (root / "labels" / s).glob("*.txt")}
-    for original in manifest["samples"]:
+    for index, original in enumerate(manifest["samples"]):
         row = dict(original); split, stem = row["split"], row["stem"]
         try:
             image = root / "images" / split / (stem + ".jpg"); label = root / "labels" / split / (stem + ".txt")
@@ -156,6 +158,7 @@ def validate(yaml_path: Path, *, use_cache=False):
                 counts[split][int(c)] += 1
             rows.append(row); groups[row["group"]].add(split); hashes[row["image_sha256"]].add(split)
         except (OSError, ValueError) as error: issues.append(stem + ": " + str(error))
+        if (index + 1) % 10 == 0 or index + 1 == total: progress(identifier, index + 1, total)
     checks = []
     def add(name, bad, summary, warning=False, **details):
         checks.append({"name": name, "severity": "WARNING" if bad and warning else "ERROR" if bad else "PASS", "summary": summary, "details": details})
@@ -176,7 +179,7 @@ def validate(yaml_path: Path, *, use_cache=False):
               "data_fingerprint": digest, "results": checks, "image_digest_cache": use_cache,
               "class_counts": {s: {names[c]: counts[s][c] for c in range(len(names))} for s in SPLITS}}
     if report["overall_severity"] != "ERROR": write_json(cache_path, {"root": str(root.resolve()), "images": refreshed})
-    write_json(paths.RUNS_DIR / "data_validation" / identifier / "report.json", report)
+    report = save_report(identifier, report); progress(identifier, total, total, phase="completed")
     return report
 
 
