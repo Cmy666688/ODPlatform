@@ -472,7 +472,8 @@ class ThreadedPipeline:
             reader.stop()
             _put_block(in_q, _SENTINEL)
             if renderer is not None:
-                renderer.join(timeout=3.0)
+                # 正常保存时排空所有帧,大图绘制/写盘不能被三秒超时截断。
+                renderer.join(timeout=None if self.save and not interrupted else 3.0)
                 renderer.stop()
             if display is not None:
                 time.sleep(0.05)

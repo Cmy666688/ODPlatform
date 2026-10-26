@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
-  <link rel="stylesheet" href="/assets/styles.css">
-  <script src="/assets/app.js?v=20261026-2" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=django-3">
+  <script src="/assets/vendor/vue.global.prod.js" defer></script>
+  <script src="/assets/app.js?v=django-3" defer></script>
+  <script src="/assets/datasets.js?v=django-3" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -14,11 +16,12 @@
     <div class="workspace-label">工作空间</div>
     <nav aria-label="主导航">
       <a href="#overview" data-page="overview" class="nav-link active"><span class="nav-icon">◫</span>监控概览</a>
+      <a href="#datasets" data-page="datasets" class="nav-link"><span class="nav-icon">▱</span>数据集管理</a>
       <a href="#data" data-page="data" class="nav-link"><span class="nav-icon">▤</span>数据质检<span id="data-dot" class="nav-dot"></span></a>
       <a href="#experiments" data-page="experiments" class="nav-link"><span class="nav-icon">⌁</span>实验记录</a>
       <a href="#results" data-page="results" class="nav-link"><span class="nav-icon">▧</span>结果可视化</a>
     </nav>
-    <div class="sidebar-note"><span class="tiny-label">当前项目</span><strong>裂缝语义分割</strong><span>MixerCSeg / CrackMap</span></div>
+    <div class="sidebar-note"><span class="tiny-label">当前项目</span><strong>二值语义分割</strong><span>Django + Vue / MixerCSeg</span></div>
     <footer class="sidebar-footer"><span class="connection-dot" id="connection-dot"></span><span id="connection-text">正在连接服务</span><small>本地工作区</small></footer>
   </aside>
   <div class="app-shell">
@@ -26,7 +29,7 @@
     <main>
       <section id="page-overview" class="page">
         <div class="page-heading"><div><div class="eyebrow">EXPERIMENT OVERVIEW</div><h1>训练监控</h1><p>从数据准备到效果验收，掌握实验的每一步。</p></div><button class="button primary" data-open-config><span>＋</span> 训练配置</button></div>
-        <div class="dataset-strip"><div><span class="dataset-symbol">▤</span><strong>CrackMap</strong><span class="badge neutral">二值语义分割</span></div><div id="dataset-counts">正在读取数据集…</div><span class="strip-model">MixerCSeg <span>·</span> 512 × 512</span></div>
+        <div class="dataset-strip"><div><span class="dataset-symbol">▤</span><select id="active-dataset" aria-label="当前数据集"><option value="crackmap">CrackMap</option></select><span class="badge neutral">二值语义分割</span></div><div id="dataset-counts">正在读取数据集…</div><a href="#datasets" class="text-link">＋ 添加数据集</a></div>
         <div class="monitor-title"><div><span id="training-dot" class="status-dot"></span><strong id="training-name">等待新实验</strong><span id="training-status" class="badge neutral">待训练</span></div><select id="monitor-job" aria-label="选择监控任务"><option value="">新实验 / 待启动</option></select></div>
         <div class="metrics-grid">
           <article class="metric-card"><span>完成轮次</span><strong id="metric-epoch">— <small>/ 50</small></strong><div id="metric-epoch-note">完整训练</div></article>
@@ -38,8 +41,46 @@
           <article class="card chart-card"><div class="card-heading"><div><h2>训练趋势</h2><p>训练与验证的真实指标</p></div><div class="segmented"><button class="selected" data-chart="loss">损失</button><button data-chart="metrics">验证指标</button></div></div><div id="chart-legend" class="legend"></div><div id="training-chart" class="chart"></div><div class="chart-foot"><span>横轴 · Epoch</span><span id="chart-update">等待训练开始</span></div></article>
           <article class="card resource-card"><div class="card-heading"><h2>运行环境</h2><span class="badge neutral" id="gpu-badge">检测中</span></div><div class="device-box"><span class="device-icon">▥</span><div><strong id="device-name">正在检测设备</strong><small id="device-note">读取计算环境</small></div></div><div class="resource-row"><span>CPU 使用率</span><strong id="cpu-value">—</strong></div><div class="meter"><i id="cpu-meter"></i></div><div class="resource-row"><span>内存使用</span><strong id="memory-value">—</strong></div><div class="meter memory"><i id="memory-meter"></i></div><div class="resource-caption" id="memory-caption">—</div><div id="gpu-resources" hidden style="margin-top:16px"><div class="resource-row"><span>GPU 使用率</span><strong id="gpu-utilization">—</strong></div><div class="resource-row"><span>显存</span><strong id="gpu-memory">—</strong></div></div><div class="environment-message" id="environment-message">正在检查训练环境…</div></article>
         </div>
-        <article class="card progress-card"><div class="card-heading"><h2>实验进程</h2><span id="progress-label">0%</span></div><div class="progress-track"><i id="progress-bar"></i></div><div class="steps"><div id="step-data"><b>1</b><span>数据就绪<small>接入与质量检查</small></span></div><div id="step-train"><b>2</b><span>完整训练<small>50 epochs</small></span></div><div id="step-test"><b>3</b><span>独立测试<small>24 张测试图</small></span></div><div id="step-results"><b>4</b><span>效果验收<small>指标与结果可视化</small></span></div></div><div id="batch-progress" class="batch-note">训练尚未启动。GPU 就绪后可提交完整实验。</div></article>
+        <article class="card progress-card"><div class="card-heading"><h2>实验进程</h2><span id="progress-label">0%</span></div><div class="progress-track"><i id="progress-bar"></i></div><div class="steps"><div id="step-data"><b>1</b><span>数据就绪<small>接入与质量检查</small></span></div><div id="step-train"><b>2</b><span>完整训练<small id="step-train-count">配置轮次</small></span></div><div id="step-test"><b>3</b><span>独立测试<small id="step-test-count">按所选数据集</small></span></div><div id="step-results"><b>4</b><span>效果验收<small>指标与结果可视化</small></span></div></div><div id="batch-progress" class="batch-note">选择数据集并配置实验后开始训练。</div></article>
         <div class="bottom-grid"><article class="card"><div class="card-heading"><h2>最近实验</h2><a href="#experiments" class="text-link">查看全部 →</a></div><div id="recent-jobs"></div></article><article class="card quality-summary"><div class="card-heading"><h2>数据质量</h2><span id="quality-badge" class="badge neutral">未检查</span></div><div id="quality-summary"></div><a href="#data" class="text-link">查看检查详情 →</a></article></div>
+      </section>
+      <section id="page-datasets" class="page" hidden>
+        <div id="dataset-manager" v-cloak>
+          <div class="page-heading"><div><div class="eyebrow">DATASET LIBRARY</div><h1>数据集管理</h1><p>上传、检查、训练，让每次实验都有清晰的数据来源。</p></div><span class="badge neutral">Django + Vue</span></div>
+          <div class="dataset-workspace">
+            <article class="card import-card">
+              <div class="card-heading"><div><h2>添加新数据集</h2><p>二值分割图像与掩膜，单次最多 512 MB</p></div><span class="dataset-symbol">↥</span></div>
+              <form @submit.prevent="upload">
+                <label class="form-label">数据集名称<input v-model="name" placeholder="例如：道路裂缝第二批" maxlength="80" required></label>
+                <div class="segmented import-modes"><button type="button" :class="{selected: mode === 'archive'}" @click="switchMode('archive')">压缩包上传</button><button type="button" :class="{selected: mode === 'folder'}" @click="switchMode('folder')">文件夹上传</button></div>
+                <label class="upload-zone dataset-drop" @dragover.prevent @drop.prevent="drop">
+                  <span class="upload-icon">▱</span><strong>[[ files.length ? selection : mode === 'archive' ? '选择或拖入数据集压缩包' : '选择数据集文件夹' ]]</strong><small>[[ mode === 'archive' ? 'ZIP / TAR / TAR.GZ / TGZ' : '保留文件夹层级，图像与掩膜同名配对' ]]</small>
+                  <input v-if="mode === 'archive'" type="file" accept=".zip,.tar,.gz,.tgz" @change="choose" :disabled="busy" hidden>
+                  <input v-else type="file" webkitdirectory multiple @change="choose" :disabled="busy" hidden>
+                </label>
+                <div v-if="busy" class="import-progress" aria-live="polite"><div class="progress-track"><i :style="{width: progress + '%'}"></i></div><span>正在上传 [[ progress ]]%</span></div>
+                <p v-if="message" :class="['import-message', error ? 'risk' : '']" role="status">[[ message ]]</p>
+                <button class="button primary" type="submit" :disabled="busy || !files.length || !name.trim()">[[ busy ? '上传中…' : '导入并运行质检' ]]</button>
+              </form>
+            </article>
+            <article class="card format-card"><span class="eyebrow">GET STARTED</span><h2>准备好图像和标注</h2><p>每张图像对应一张同名二值掩膜，标注值为 0/1 或 0/255。支持 PNG、JPG 等图像；模型将学习掩膜中的前景。</p><pre>dataset/
+  images/
+    sample_01.jpg
+    sample_02.jpg
+  masks/
+    sample_01.png
+    sample_02.png</pre><p>没有划分时，按文件名前缀分组，以种子 42 生成约 70% / 15% / 15% 的训练、验证、测试集（至少 3 组）。</p><details><summary>已有 train / val / test？</summary><pre>images/{train,val,test}/
+masks/{train,val,test}/
+
+或 train_img/ + train_lab/
+   val_img/   + val_lab/
+   test_img/  + test_lab/</pre><p>会保留你的划分，外层允许包含一个数据集文件夹。</p></details><a href="/api/datasets/template" class="text-link" download>下载示例模板（9 对合成图像，仅供流程验证） ↓</a></article>
+          </div>
+          <article class="card dataset-library"><div class="card-heading"><div><h2>我的数据集</h2><p>质检就绪后，可选择数据集创建训练实验</p></div><span class="caption">[[ rows.length ]] 个数据集</span></div>
+            <div class="dataset-list"><article v-for="item in rows" :key="item.id" class="dataset-row"><div class="dataset-avatar">▤</div><div class="dataset-row-main"><div class="dataset-row-title"><strong>[[ item.name ]]</strong><span :class="['badge', item.status === 'ready' ? 'success' : item.status === 'importing' ? 'warning' : 'danger']">[[ labels[item.status] ]]</span></div><p>[[ item.available ? item.splits.train + ' 训练 · ' + item.splits.val + ' 验证 · ' + item.splits.test + ' 测试' : item.phase ]]<span v-if="item.status === 'importing'"> · [[ Math.round(item.progress * 100) ]]%</span></p><small v-if="item.error" class="risk">[[ item.error ]]</small><small v-else>[[ item.source_name ]]</small></div><div class="dataset-actions"><button class="button secondary" type="button" :disabled="!item.available" @click="preview(item)">预览</button><button class="button secondary" type="button" :disabled="!item.available" @click="inspect(item)">质检</button><button class="button primary" type="button" :disabled="!item.trainable" @click="train(item)">创建训练</button></div></article></div>
+          </article>
+          <dialog ref="previewDialog" class="dataset-preview-dialog"><div class="dialog-heading"><div><span class="eyebrow">DATASET PREVIEW</span><h2>[[ previewName ]]</h2></div><button type="button" class="icon-button" @click="$refs.previewDialog.close()" aria-label="关闭预览">×</button></div><p class="body-copy">每组左侧为原图，右侧为标注。训练前请确认前景含义与配对关系。</p><div class="dataset-previews"><figure v-for="item in previews" :key="item.image"><div><img :src="item.image" alt="原始图像"><img :src="item.mask" alt="二值掩膜"></div><figcaption>[[ item.split ]] · [[ item.name ]]</figcaption></figure></div></dialog>
+        </div>
       </section>
       <section id="page-data" class="page" hidden>
         <div class="page-heading"><div><div class="eyebrow">DATA QUALITY</div><h1>数据质检</h1><p>检查配对、像素格式与数据身份，保留每一条风险提示。</p></div><button id="validate-data" class="button primary">重新质检</button></div>
@@ -51,13 +92,13 @@
       </section>
       <section id="page-results" class="page" hidden>
         <div class="page-heading"><div><div class="eyebrow">VISUAL RESULTS</div><h1>结果可视化</h1><p>查看分割掩膜、像素误差和独立测试集指标。</p></div><span class="badge neutral" id="result-panel-label">原图 · GT · 预测 · 误差</span></div>
-        <div class="results-grid"><article class="card"><div class="card-heading"><h2>图片推理</h2><span class="caption">PNG / JPG · 最大 20 MB</span></div><label class="upload-zone" id="upload-zone" for="image-upload"><span class="upload-icon">↥</span><strong>拖入图片，或点击上传</strong><small id="upload-description">使用已就绪的权重查看裂缝分割效果</small><input id="image-upload" type="file" accept="image/png,image/jpeg,image/bmp" hidden></label><div class="infer-controls"><label>模型<select id="infer-model"><option value="official">官方 CrackMap 参考权重</option></select></label><label>前景阈值 <strong id="threshold-value">0.50</strong><input id="infer-threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.5"></label><button class="button primary" id="run-inference" disabled>开始推理</button></div><div id="infer-feedback" class="caption" aria-live="polite"></div></article><article class="card result-note"><span class="eyebrow">EVALUATION</span><h2>让效果有据可查</h2><p>完整训练结束后，自动使用验证集选出的最佳权重，在独立测试集上计算 F1、前景 IoU、精确率和召回率。</p><div class="result-key"><span class="key green"></span>正确前景 TP<span class="key red"></span>误检 FP<span class="key blue"></span>漏检 FN</div><p class="caption">已有官方权重结果标记为“参考结果”，与本次完整训练产物分别展示。</p></article></div>
+        <div class="results-grid"><article class="card"><div class="card-heading"><h2>图片推理</h2><span class="caption">PNG / JPG · 最大 20 MB</span></div><label class="upload-zone" id="upload-zone" for="image-upload"><span class="upload-icon">↥</span><strong>拖入图片，或点击上传</strong><small id="upload-description">使用已就绪的权重查看前景分割效果</small><input id="image-upload" type="file" accept="image/png,image/jpeg,image/bmp" hidden></label><div class="infer-controls"><label>模型<select id="infer-model"><option value="official">官方 CrackMap 参考权重</option></select></label><label>前景阈值 <strong id="threshold-value">0.50</strong><input id="infer-threshold" type="range" min="0.05" max="0.95" step="0.05" value="0.5"></label><button class="button primary" id="run-inference" disabled>开始推理</button></div><div id="infer-feedback" class="caption" aria-live="polite"></div></article><article class="card result-note"><span class="eyebrow">EVALUATION</span><h2>让效果有据可查</h2><p>完整训练结束后，自动使用验证集选出的最佳权重，在独立测试集上计算 F1、前景 IoU、精确率和召回率。</p><div class="result-key"><span class="key green"></span>正确前景 TP<span class="key red"></span>误检 FP<span class="key blue"></span>漏检 FN</div><p class="caption">已有官方权重结果标记为“参考结果”，与本次完整训练产物分别展示。</p></article></div>
         <article class="card gallery-card"><div class="card-heading"><div><h2>结果浏览</h2><p id="gallery-description">选择结果来源</p></div><select id="result-source" aria-label="结果来源"><option value="reference">官方权重参考结果</option></select></div><div id="evaluation-metrics" class="evaluation-metrics"></div><div id="gallery-tools" class="gallery-tools" hidden><label>图片<select id="gallery-image" aria-label="选择结果图片"></select></label><a id="download-result" class="button secondary" download>下载当前图片</a></div><div id="gallery-preview" class="gallery-preview"><div class="empty"><strong>暂无结果</strong><span>训练验收或图片推理完成后，结果会显示在这里。</span></div></div><div id="gallery-thumbnails" class="thumbnails"></div><div id="result-downloads" class="download-links"></div></article>
       </section>
     </main>
-    <footer class="page-footer"><span>ODPlatform</span><span>MixerCSeg 裂缝语义分割工作台</span></footer>
+    <footer class="page-footer"><span>ODPlatform</span><span>MixerCSeg 二值语义分割工作台</span></footer>
   </div>
-  <dialog id="config-dialog"><form id="training-form"><div class="dialog-heading"><div><span class="eyebrow">NEW EXPERIMENT</span><h2>完整训练配置</h2></div><button type="button" class="icon-button" id="close-config" aria-label="关闭配置">×</button></div><p class="body-copy">保留原始模型配方，完成训练后自动进行独立测试和结果可视化。</p><label class="form-label">实验名称<input name="name" value="CrackMap 完整实验" maxlength="80" required></label><div class="form-grid"><label>训练轮次<input name="epochs" type="number" value="50" min="1" max="1000" required></label><label>训练批大小<input name="batch_size_train" type="number" value="1" min="1" max="64" required></label><label>学习率<input name="lr" type="number" value="0.0005" min="0.000002" max="1" step="any" required></label><label>随机种子<input name="seed" type="number" value="42" step="1" required></label></div><div class="recipe-summary"><span>AdamW + PolyLR</span><span>512 × 512</span><span>BCE 0.87 / Dice 0.13</span><span>HOG bins 36</span></div><label class="form-label">F1 验收目标（可选）<input name="min_f1" type="number" min="0" max="1" step="0.01" placeholder="留空时报告实际效果，由人工评审"></label><div id="config-readiness" class="environment-message">检测计算环境</div><div class="dialog-actions"><button type="button" id="save-draft" class="button secondary">保存配置</button><button type="submit" class="button primary" id="start-training" disabled>GPU 就绪后开始训练</button></div></form></dialog>
+  <dialog id="config-dialog"><form id="training-form"><div class="dialog-heading"><div><span class="eyebrow">NEW EXPERIMENT</span><h2>完整训练配置</h2></div><button type="button" class="icon-button" id="close-config" aria-label="关闭配置">×</button></div><p class="body-copy">保留原始模型配方，完成训练后自动进行独立测试和结果可视化。</p><div class="form-grid"><label>训练数据集<select name="data" id="training-dataset"><option value="crackmap">CrackMap</option></select></label><label>计算设备<select name="device" id="training-device"><option value="auto">本机 CUDA GPU</option><option value="cpu">CPU 验证（较慢）</option></select></label></div><label class="form-label">实验名称<input name="name" value="CrackMap 完整实验" maxlength="80" required></label><div class="form-grid"><label>训练轮次<input name="epochs" type="number" value="50" min="1" max="1000" required></label><label>训练批大小<input name="batch_size_train" type="number" value="1" min="1" max="64" required></label><label>学习率<input name="lr" type="number" value="0.0005" min="0.000002" max="1" step="any" required></label><label>随机种子<input name="seed" type="number" value="42" step="1" required></label></div><div class="recipe-summary"><span>AdamW + PolyLR</span><span>512 × 512</span><span>BCE 0.87 / Dice 0.13</span><span>HOG bins 36</span></div><label class="form-label">F1 验收目标（可选）<input name="min_f1" type="number" min="0" max="1" step="0.01" placeholder="留空时报告实际效果，由人工评审"></label><div id="config-readiness" class="environment-message">检测计算环境</div><div class="dialog-actions"><button type="button" id="save-draft" class="button secondary">保存配置</button><button type="submit" class="button primary" id="start-training" disabled>GPU 就绪后开始训练</button></div></form></dialog>
   <div id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

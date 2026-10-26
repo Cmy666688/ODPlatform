@@ -57,7 +57,7 @@ ignore_missing_imports = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["od_platform.backends.mixercseg._vendor.*", "timm.*", "fvcore.*", "mmengine.*", "gdown.*", "numba.*", "streamlit.*", "pandas.*", "matplotlib.*", "pynvml.*"]
+module = ["od_platform.backends.mixercseg._vendor.*", "timm.*", "fvcore.*", "mmengine.*", "gdown.*", "numba.*", "streamlit.*", "pandas.*", "matplotlib.*", "pynvml.*", "django.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 
@@ -66,6 +66,7 @@ ignore_missing_imports = true
 # Pytest 配置(测试发现 + 标记)
 # =============================================================================
 [tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "od_web.settings"
 minversion = "7.0"
 testpaths = [
     "apps/platform/tests",

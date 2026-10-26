@@ -14,7 +14,7 @@ odp-train --backend mixercseg --config mixercseg_train
 ```
 
 - `apps/platform/` — 核心引擎（数据转换、训练、推理）
-- `apps/web-backend/` — FastAPI 服务与训练监控面板
+- `apps/web-backend/` — Django 服务、Vue 数据集管理与训练监控面板
 - `apps/streamlit/` — 复用 API 的算法调试工作台
 - `apps/desktop/` — PySide6 桌面推理示例（可选）
 - `data/` — 数据集（共享，gitignored）
@@ -34,6 +34,7 @@ odp-init
 
 ```bash
 pip install -e "./apps/platform[dev,desktop]"
+pip install -e "./apps/web-backend[workbench,test]"
 python scripts/check_project.py
 python -m pre_commit install
 ```
@@ -56,9 +57,9 @@ Web 监控与结果可视化：
 
 ```powershell
 pip install -e "./apps/platform[mixercseg,cpu]"
-pip install -e "./apps/web-backend[workbench]"
+pip install -e "./apps/web-backend[workbench,test]"
 powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 ```
 
-面板打开 <http://127.0.0.1:8000>。完整训练需要 CUDA，不会因页面刷新或保存配置而启动。
+面板打开 <http://127.0.0.1:8000/#datasets>。支持上传 ZIP、TAR.GZ 或文件夹中的二值分割数据，质检后选择数据集训练并可视化。GPU 训练要求服务所在机器具备 CUDA，也可显式选择 CPU 验证；刷新和保存配置不会启动训练。
 功能、任务接口和验收边界见 [Web 使用说明](apps/web-backend/README.md)。

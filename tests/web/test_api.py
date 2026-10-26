@@ -3,24 +3,12 @@ from __future__ import annotations
 
 import os
 
-from fastapi.testclient import TestClient
 import numpy as np
 import pytest
 
 from od_platform.common import paths
 from od_platform.common.json_io import write_json
 from od_platform.common.semantic import write_png
-from od_web import app as app_mod
-from od_web.jobs import JobStore
-
-
-@pytest.fixture
-def web(tmp_path, monkeypatch):
-    monkeypatch.setattr(paths, "RUNS_DIR", tmp_path / "runs")
-    store = JobStore(tmp_path / "runs/web_jobs")
-    monkeypatch.setattr(app_mod, "_hardware", lambda: {"cuda_available": False, "device": "CPU"})
-    with TestClient(app_mod.create_app(store)) as client:
-        yield client, store, tmp_path
 
 
 def test_without_gpu_complete_training_never_starts(web, monkeypatch):
@@ -82,7 +70,7 @@ def test_cross_origin_task_submission_is_rejected(web):
 
 def test_frontend_and_schema_are_served(web):
     client, _, _ = web
-    assert "训练监控" in client.get("/").text
+    assert "训练监控" in client.get("/").text and "数据集管理" in client.get("/").text
     assert client.get("/assets/app.js").status_code == 200
     document = client.get("/api/config").json()
     assert document["defaults"]["epochs"] == 50

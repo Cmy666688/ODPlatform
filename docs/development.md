@@ -7,7 +7,7 @@
 
 ```bash
 pip install -e "./apps/platform[dev,desktop,mixercseg,cpu]"
-pip install -e "./apps/web-backend[workbench]"
+pip install -e "./apps/web-backend[workbench,test]"
 ```
 
 Windows 下建议设置 `PYTHONUTF8=1`，避免重定向日志时中文编码受终端影响。

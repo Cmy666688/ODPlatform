@@ -8,7 +8,7 @@ New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
 function Test-Backend {
     try {
         $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 2
-        return $health.status -eq 'ok'
+        return $health.status -eq 'ok' -and $health.framework -eq 'django'
     } catch { return $false }
 }
 

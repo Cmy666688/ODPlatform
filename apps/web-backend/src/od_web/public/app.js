@@ -4,6 +4,7 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { overview: null, defaults: null, jobs: [], monitorId: "", detailId: "", chart: "loss", uploadId: null, gallery: [], source: "reference", busy: false };
+state.datasetId = localStorage.getItem("odp-dataset") || "crackmap";
 const statusNames = { queued: "排队中", running: "运行中", cancelling: "正在停止", cancelled: "已停止", completed: "已完成", failed: "失败" };
 const phaseNames = { validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成", failed: "失败", cancelled: "已停止" };
 const checkNames = { mask_pair_existence: "图像与掩膜配对", mask_decode_and_format: "解码与标注格式", mask_dimensions: "图像与掩膜尺寸", mask_alpha_channels: "Alpha 通道处理", mask_foreground_coverage: "前景覆盖率", mask_split_uniqueness: "跨集合像素重复", mask_source_group_overlap: "同源分组风险", mask_manifest_lineage: "图像与掩膜身份" };
@@ -16,6 +17,7 @@ const statusBadge = (job) => badge(job.cancel_requested && active(job) ? "正在
 const empty = (title, message) => `<div class="empty"><strong>${esc(title)}</strong><span>${esc(message)}</span></div>`;
 
 async function api(path, options = {}) {
+  if (options.method && options.method !== "GET") options.headers = { ...options.headers, "X-CSRFToken": csrfToken() };
   const response = await fetch(path, options);
   if (!response.ok) {
     let message = `请求失败 (${response.status})`;
@@ -23,6 +25,15 @@ async function api(path, options = {}) {
     throw new Error(message);
   }
   return response.json();
+}
+
+function artifactUrl(url) { return url.split("/").map((part) => { try { return encodeURIComponent(decodeURIComponent(part)); } catch (_) { return encodeURIComponent(part); } }).join("/"); }
+
+function csrfToken() { return decodeURIComponent(document.cookie.split("; ").find((value) => value.startsWith("csrftoken="))?.split("=")[1] || ""); }
+
+async function selectDataset(identifier) {
+  state.datasetId = identifier; localStorage.setItem("odp-dataset", identifier);
+  await refresh();
 }
 
 function toast(message, error = false) {
@@ -40,10 +51,10 @@ function duration(seconds) {
 
 function route() {
   const name = location.hash.slice(1) || "overview";
-  const valid = ["overview", "data", "experiments", "results"].includes(name) ? name : "overview";
+  const valid = ["overview", "datasets", "data", "experiments", "results"].includes(name) ? name : "overview";
   $$(".page").forEach((page) => { page.hidden = page.id !== `page-${valid}`; });
   $$(".nav-link").forEach((link) => link.classList.toggle("active", link.dataset.page === valid));
-  $("#breadcrumb-title").textContent = { overview: "监控概览", data: "数据质检", experiments: "实验记录", results: "结果可视化" }[valid];
+  $("#breadcrumb-title").textContent = { overview: "监控概览", datasets: "数据集管理", data: "数据质检", experiments: "实验记录", results: "结果可视化" }[valid];
   window.scrollTo(0, 0);
   if (valid === "results") loadGallery().catch((error) => toast(error.message, true));
 }
@@ -82,6 +93,12 @@ function jobTable(jobs, limit) {
 
 function renderOverview() {
   const data = state.overview, split = data.dataset.splits;
+  const choices = data.datasets.filter((item) => item.available);
+  for (const selector of ["#active-dataset", "#training-dataset"]) {
+    const options = choices.map((item) => `<option value="${esc(item.id)}" ${selector === "#training-dataset" && !item.trainable ? "disabled" : ""}>${esc(item.name)}${item.trainable ? "" : " · 需质检"}</option>`).join("");
+    if ($(selector).innerHTML !== options) $(selector).innerHTML = options;
+    $(selector).value = state.datasetId;
+  }
   const training = state.jobs.filter((job) => job.kind === "training");
   if (!state.monitorChosen && training.length) {
     state.monitorId = (training.find(active) || training[0]).id;
@@ -108,8 +125,10 @@ function renderOverview() {
   const remoteNote = monitored?.status === "completed" ? "远程实验已结束，权重、指标和可视化已同步到本机。" : !active(monitored || {}) ? "远程实验已结束，可在实验记录中查看日志。" : Date.now() - Date.parse(monitored.synced_at) > 20000 ? "远程进度同步暂时中断，正在等待连接恢复。" : "当前实验在远程 GPU 执行，进度与产物自动同步到本机。";
   $("#environment-message").textContent = monitored?.execution === "remote" ? remoteNote : readiness;
   $("#environment-message").classList.toggle("ready", hardware.cuda_available);
-  $("#start-training").disabled = !data.hardware.cuda_available || state.jobs.some(active);
-  $("#start-training").textContent = data.hardware.cuda_available ? "开始完整训练" : "GPU 就绪后开始训练";
+  const cpu = $("#training-device").value === "cpu";
+  $("#start-training").disabled = (!data.hardware.cuda_available && !cpu) || state.jobs.some(active) || !data.dataset.trainable;
+  $("#start-training").textContent = !data.dataset.trainable ? "数据集尚未就绪" : cpu ? "开始 CPU 训练" : data.hardware.cuda_available ? "开始完整训练" : "GPU 就绪后开始训练";
+  if (cpu) $("#config-readiness").textContent = "已显式选择 CPU，训练速度较慢，建议少量轮次验证流程。";
   const select = $("#monitor-job");
   const options = '<option value="">新实验 / 待启动</option>' + training.map((job) => `<option value="${job.id}">${esc(job.name)} · ${statusNames[job.status]}</option>`).join("");
   if (select.innerHTML !== options) { select.innerHTML = options; select.value = state.monitorId; }
@@ -138,6 +157,8 @@ function renderOverview() {
 function renderMonitor() {
   const job = state.jobs.find((row) => row.id === state.monitorId);
   const history = job?.history || [], last = history.at(-1), epochs = job?.config?.epochs || state.draft?.config?.epochs || state.defaults?.epochs || 50;
+  $("#step-train-count").textContent = `${epochs} epochs`;
+  $("#step-test-count").textContent = job?.dataset_counts?.test ? `${job.dataset_counts.test} 张测试图` : "所选数据集的独立测试集";
   $("#training-name").textContent = job?.name || "等待新实验";
   $("#training-status").outerHTML = `<span id="training-status" class="badge ${job ? job.status === "completed" ? "success" : job.status === "failed" ? "danger" : "neutral" : "neutral"}">${job ? esc(statusNames[job.status]) : "待训练"}</span>`;
   $("#training-dot").classList.toggle("running", Boolean(job && active(job)));
@@ -176,7 +197,8 @@ async function refresh(silent = false) {
   if (state.busy) return;
   state.busy = true;
   try {
-    state.overview = await api("/api/overview"); state.jobs = state.overview.jobs;
+    state.overview = await api(`/api/overview?dataset=${encodeURIComponent(state.datasetId)}`); state.jobs = state.overview.jobs;
+    window.dispatchEvent(new CustomEvent("odp:overview", { detail: state.overview }));
     $("#connection-dot").classList.add("connected"); $("#connection-text").textContent = "服务已连接";
     renderOverview();
     if (state.detailId) await showDetail(state.detailId, false);
@@ -208,22 +230,22 @@ async function loadGallery() {
     const job = state.jobs.find((row) => row.id === source);
     $("#gallery-description").textContent = job?.kind === "training" ? "本次训练最佳权重 · 独立 test 集验收" : "图片推理结果 · 无 GT 时展示概率图与预测叠加";
     if (job?.metrics) $("#evaluation-metrics").innerHTML = [["F1", job.metrics.F1], ["前景 IoU", job.metrics.foreground_IoU], ["mIoU", job.metrics.mIoU], ["精确率", job.metrics.precision], ["召回率", job.metrics.recall]].map(([label, value]) => `<div>${label}<strong>${percent(value)}</strong></div>`).join("");
-    $("#result-downloads").innerHTML = artifacts.filter((entry) => ["report.json", "report.md", "per_image.csv", "training_curves.png", "best.pth"].includes(entry.name)).map((entry) => `<a href="${encodeURI(entry.url)}?download=true" download>${esc(entry.name)} ↓</a>`).join("");
+    $("#result-downloads").innerHTML = artifacts.filter((entry) => ["report.json", "report.md", "per_image.csv", "training_curves.png", "best.pth"].includes(entry.name)).map((entry) => `<a href="${artifactUrl(entry.url)}?download=true" download>${esc(entry.name)} ↓</a>`).join("");
     if (job?.kind === "training" && job.quality_status === "needs_review") $("#gallery-description").textContent += " · 未设精度目标，效果待人工评审";
     if (job?.kind === "training" && job.quality_status === "failed") $("#gallery-description").textContent += " · 未达到配置的 F1 验收目标";
     if (job?.kind === "training" && job.quality_status === "passed") $("#gallery-description").textContent += " · 达到配置的 F1 验收目标";
   }
   $("#gallery-tools").hidden = !state.gallery.length;
   $("#gallery-image").innerHTML = state.gallery.map((entry, index) => `<option value="${index}">${esc(entry.name)}</option>`).join("");
-  $("#gallery-thumbnails").innerHTML = state.gallery.map((entry, index) => `<button class="thumbnail ${index === 0 ? "selected" : ""}" data-image="${index}" aria-label="查看第 ${index + 1} 张结果"><img loading="lazy" src="${encodeURI(entry.url)}" alt="${esc(entry.name)}"></button>`).join("");
+  $("#gallery-thumbnails").innerHTML = state.gallery.map((entry, index) => `<button class="thumbnail ${index === 0 ? "selected" : ""}" data-image="${index}" aria-label="查看第 ${index + 1} 张结果"><img loading="lazy" src="${artifactUrl(entry.url)}" alt="${esc(entry.name)}"></button>`).join("");
   displayImage(0);
 }
 
 function displayImage(index) {
   const entry = state.gallery[index];
-  $("#gallery-preview").innerHTML = entry ? `<a href="${encodeURI(entry.url)}" target="_blank" rel="noreferrer" title="打开原尺寸图片"><img src="${encodeURI(entry.url)}" alt="分割对比结果 ${esc(entry.name)}，点击查看原尺寸"></a>` : empty("暂无可视化产物", "完整训练或图片推理完成后，可在这里查看结果。");
+  $("#gallery-preview").innerHTML = entry ? `<a href="${artifactUrl(entry.url)}" target="_blank" rel="noreferrer" title="打开原尺寸图片"><img src="${artifactUrl(entry.url)}" alt="分割对比结果 ${esc(entry.name)}，点击查看原尺寸"></a>` : empty("暂无可视化产物", "完整训练或图片推理完成后，可在这里查看结果。");
   $("#gallery-image").value = String(index);
-  if (entry) { $("#download-result").href = encodeURI(entry.url); $("#download-result").download = entry.name; }
+  if (entry) { $("#download-result").href = artifactUrl(entry.url); $("#download-result").download = entry.name; }
   $$(".thumbnail").forEach((button) => button.classList.toggle("selected", Number(button.dataset.image) === index));
 }
 
@@ -241,7 +263,8 @@ async function uploadImage(file) {
 
 function draft() {
   const values = new FormData($("#training-form"));
-  return { name: values.get("name"), config: { ...state.defaults, epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, min_f1: values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
+  const cpu = values.get("device") === "cpu";
+  return { name: values.get("name"), config: { ...state.defaults, data: values.get("data"), device: cpu ? "cpu" : "auto", scan_backend: cpu ? "cpu_jit" : "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: !cpu, min_f1: values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
 }
 
 function openConfig() {
@@ -252,6 +275,9 @@ function openConfig() {
     for (const field of ["epochs", "batch_size_train", "lr", "seed"]) form.elements[field].value = saved.config[field];
     form.elements.min_f1.value = saved.min_f1 ?? "";
   }
+  if (!saved || saved.config.data !== state.datasetId) $("#training-form").elements.name.value = `${state.overview.dataset.name} 完整实验`;
+  $("#training-dataset").value = state.datasetId;
+  renderOverview();
   $("#config-dialog").showModal();
 }
 
@@ -274,20 +300,23 @@ document.addEventListener("click", async (event) => {
 });
 
 $("#refresh").addEventListener("click", () => refresh());
+$("#active-dataset").addEventListener("change", (event) => selectDataset(event.target.value));
+$("#training-dataset").addEventListener("change", (event) => selectDataset(event.target.value));
+$("#training-device").addEventListener("change", () => renderOverview());
 $("#monitor-job").addEventListener("change", (event) => { state.monitorId = event.target.value; state.monitorChosen = true; renderOverview(); });
 $("#close-config").addEventListener("click", () => $("#config-dialog").close());
 $("#save-draft").addEventListener("click", () => { if (!$("#training-form").reportValidity()) return; state.draft = draft(); localStorage.setItem("odp-training-draft", JSON.stringify(state.draft)); $("#config-dialog").close(); renderMonitor(); toast("训练配置已保存，未启动训练"); });
 $("#training-form").addEventListener("submit", async (event) => {
   event.preventDefault(); const button = $("#start-training"); button.disabled = true;
   try {
-    const request = { ...draft(), kind: "training", require_cuda: true };
+    const request = { ...draft(), kind: "training" };
     const job = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
     state.monitorId = job.id; $("#config-dialog").close(); await refresh(); location.hash = "overview"; toast("完整训练任务已提交");
   } catch (error) { toast(error.message, true); } finally { renderOverview(); }
 });
 $("#validate-data").addEventListener("click", async (event) => {
   const button = event.target; button.disabled = true; button.textContent = "检查中…";
-  try { await api("/api/datasets/crackmap/validate", { method: "POST" }); await refresh(); toast("数据质检已完成"); } catch (error) { toast(error.message, true); } finally { button.disabled = false; button.textContent = "重新质检"; }
+  try { await api(`/api/datasets/${state.datasetId}/validate`, { method: "POST" }); await refresh(); toast("数据质检已完成"); } catch (error) { toast(error.message, true); } finally { button.disabled = false; button.textContent = "重新质检"; }
 });
 $("#image-upload").addEventListener("change", (event) => uploadImage(event.target.files[0]));
 $("#upload-zone").addEventListener("dragover", (event) => { event.preventDefault(); $("#upload-zone").classList.add("dragging"); });

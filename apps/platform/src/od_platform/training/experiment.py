@@ -24,7 +24,10 @@ def run_experiment(job_dir: Path) -> int:
     state = {"id": job_dir.name, "kind": "training", "name": request.get("name", "CrackMap 完整实验"),
              "status": "running", "phase": "starting", "pid": os.getpid(),
              "created_at": request["created_at"], "started_at": datetime.now(timezone.utc).isoformat(),
-             "config": config.model_dump(), "history": [], "progress": 0.0}
+             "config": config.model_dump(), "history": [], "progress": 0.0,
+             "dataset_name": request.get("dataset_name", config.data),
+             "dataset_counts": request.get("dataset_counts"),
+             "dataset_fingerprint": request.get("dataset_fingerprint")}
     started = time.perf_counter()
     def cancelled(): return (job_dir / "cancel.request").exists()
     def update(event):

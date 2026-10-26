@@ -18,6 +18,12 @@ def client():
     return httpx.Client(base_url=API_URL, timeout=20, trust_env=False)
 
 
+def post(path, document):
+    connection = client()
+    connection.get("/").raise_for_status()
+    return connection.post(path, json=document, headers={"X-CSRFToken": connection.cookies.get("csrftoken", "")})
+
+
 def get(path):
     response = client().get(path); response.raise_for_status()
     return response.json()
@@ -40,13 +46,15 @@ with st.sidebar:
     st.caption("当前设备")
     st.text(overview["hardware"]["device"])
     if not overview["hardware"]["cuda_available"]:
-        st.info("CUDA GPU 尚未就绪，完整训练未启动。")
+        st.info("本机 CUDA 不可用。可查看既有实验；新数据集导入与 CPU 验证请使用 Django 面板。")
 
 view = st.segmented_control("工作视图", ["训练监控", "数据质量", "结果浏览"], default="训练监控")
 
 if view == "训练监控":
     with st.expander("配置完整训练"):
         with st.form("new_experiment"):
+            available = {row["id"]: row["name"] for row in overview.get("datasets", []) if row.get("trainable")}
+            dataset = st.selectbox("训练数据集", list(available) or ["crackmap"], format_func=lambda key: available.get(key, key))
             name = st.text_input("实验名称", "CrackMap 完整实验")
             col1, col2, col3 = st.columns(3)
             epochs = col1.number_input("训练轮次", min_value=1, max_value=1000, value=50)
@@ -54,8 +62,8 @@ if view == "训练监控":
             lr = col3.number_input("学习率", min_value=0.000002, max_value=1.0, value=0.0005, format="%.6f")
             submitted = st.form_submit_button("开始完整实验", type="primary", disabled=not overview["hardware"]["cuda_available"])
         if submitted:
-            response = client().post("/api/jobs", json={"kind": "training", "name": name,
-                       "config": {"epochs": epochs, "batch_size_train": batch, "lr": lr}, "require_cuda": True})
+            response = post("/api/jobs", {"kind": "training", "name": name,
+                       "config": {"data": dataset, "epochs": epochs, "batch_size_train": batch, "lr": lr}, "require_cuda": True})
             if response.is_success:
                 st.session_state.selected_job = response.json()["id"]
                 st.success("任务已提交，训练完成后自动生成独立测试报告。")

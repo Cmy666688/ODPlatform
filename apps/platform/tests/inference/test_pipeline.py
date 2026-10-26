@@ -203,3 +203,16 @@ def test_semantic_renderer_receives_frame_metadata(make_images):
     pipe.run(stats)
     assert len(seen) == stats.frames == 2
     assert all(name.endswith(".jpg") for name in seen)
+
+
+def test_saved_large_frame_finishes_rendering_before_sink_closes(make_images):
+    import time
+    sink = RecordingSink(); pipe, stats = _build(make_images(1), sink=sink, save=True)
+    class SlowProcessor(FakeProcessor):
+        def draw(self, image, result, labels, n):
+            time.sleep(3.2)
+            assert sink.closed == 0
+            return super().draw(image, result, labels, n)
+    pipe.proc = SlowProcessor()
+    assert pipe.run(stats) is False
+    assert stats.frames == sink.frames == 1 and sink.closed == 1

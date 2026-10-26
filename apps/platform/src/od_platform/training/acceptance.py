@@ -85,7 +85,7 @@ def evaluate_checkpoint(config: MixerCSegConfig, data_yaml: Path, checkpoint: Pa
     if history:
         render_curves(history, output / "training_curves.png")
     (output / "report.md").write_text(
-        "# CrackMap 独立测试集验收\n\n"
+        f"# {config.data} 独立测试集验收\n\n"
         f"测试图片: {len(rows)};固定阈值: {config.threshold};原图尺寸像素统计。\n\n"
         + "\n".join(f"- {k}: {v:.6f}" for k, v in values.items())
         + "\n\n" + report["quality_note"] + "。\n\n" + report["dataset_warning"] + "。\n", encoding="utf-8")
