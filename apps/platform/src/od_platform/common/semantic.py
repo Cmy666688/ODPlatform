@@ -59,7 +59,10 @@ def write_png(path: Path, pixels: np.ndarray) -> None:
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024): digest.update(chunk)
+    return digest.hexdigest()
 
 
 def semantic_fingerprint(samples: list[dict[str, Any]]) -> str:

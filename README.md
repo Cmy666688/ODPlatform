@@ -61,5 +61,5 @@ pip install -e "./apps/web-backend[workbench,test]"
 powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 ```
 
-面板打开 <http://127.0.0.1:8000/#datasets>。支持上传 ZIP、TAR.GZ 或文件夹中的二值分割数据，质检后选择数据集训练并可视化。网页训练、独立测试及图片推理统一使用配置的远程 CUDA GPU，本机负责界面、数据管理和结果展示；远程配置见 [Web 说明](apps/web-backend/README.md)。刷新和保存配置不会启动训练。
+面板打开 <http://127.0.0.1:8000/#overview>。当前默认使用 **WSODD / YOLOv8n 水面目标检测**，7,467 张图像、14 类，支持检测框预览、远程训练和独立测试可视化；数据与配方见 [WSODD 实验说明](docs/wsodd-training.md)。网页训练、独立测试及图片推理统一使用远程 CUDA GPU；连接配置见 [Web 说明](apps/web-backend/README.md)。原二值分割 ZIP / 文件夹导入作为兼容入口保留，刷新和保存配置不会启动训练。
 功能、任务接口和验收边界见 [Web 使用说明](apps/web-backend/README.md)。

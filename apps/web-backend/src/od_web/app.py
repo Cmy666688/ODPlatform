@@ -4,13 +4,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 import psutil
 
 from od_platform.common import paths
 from od_platform.runtime_config.mixercseg import MixerCSegConfig
+from od_platform.runtime_config.detection import DetectionConfig
 
 from .jobs import JobStore
 
@@ -18,12 +19,23 @@ from .jobs import JobStore
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["training", "inference"]
-    name: str = Field(default="CrackMap 完整实验", min_length=1, max_length=80)
-    config: MixerCSegConfig = Field(default_factory=MixerCSegConfig)
+    name: str = Field(default="WSODD 完整实验", min_length=1, max_length=80)
+    config: Annotated[Union[MixerCSegConfig, DetectionConfig], Field(discriminator="backend")] = Field(default_factory=DetectionConfig)
     require_cuda: bool = True
     min_f1: Optional[float] = Field(default=None, ge=0, le=1)
     upload_id: Optional[str] = None
     model_id: str = "official"
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_backend(cls, value):
+        if isinstance(value, dict) and isinstance(value.get("config"), dict):
+            config = value["config"]
+            if "backend" not in config:
+                data = config.get("data", "wsodd")
+                backend = "mixercseg" if data == "crackmap" or data.startswith("ds_") else "yolo"
+                value = {**value, "config": {**config, "backend": backend}}
+        return value
 
 
 def _hardware() -> dict:

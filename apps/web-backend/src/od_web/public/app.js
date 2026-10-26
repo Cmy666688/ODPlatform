@@ -4,10 +4,12 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { overview: null, defaults: null, jobs: [], monitorId: "", detailId: "", chart: "loss", uploadId: null, gallery: [], source: "reference", busy: false };
-state.datasetId = localStorage.getItem("odp-dataset") || "crackmap";
+state.datasetId = localStorage.getItem("odp-dataset-wsodd") || "wsodd";
 const statusNames = { queued: "排队中", running: "运行中", cancelling: "正在停止", cancelled: "已停止", completed: "已完成", failed: "失败" };
 const phaseNames = { queued: "排队中", uploading: "上传到远程 GPU", validating: "数据质检", starting: "准备模型", training: "训练中", validating_epoch: "验证中", epoch_complete: "本轮完成", testing: "独立测试", syncing: "同步结果", inference: "推理中", completed: "已完成", failed: "失败", cancelled: "已停止" };
 const checkNames = { mask_pair_existence: "图像与掩膜配对", mask_decode_and_format: "解码与标注格式", mask_dimensions: "图像与掩膜尺寸", mask_alpha_channels: "Alpha 通道处理", mask_foreground_coverage: "前景覆盖率", mask_split_uniqueness: "跨集合像素重复", mask_source_group_overlap: "同源分组风险", mask_manifest_lineage: "图像与掩膜身份" };
+Object.assign(checkNames, { detection_pairing: "图像与检测标签配对", detection_boxes: "尺寸、类别与检测框", detection_decode: "原图完整解码", detection_groups: "采集序列独立划分", detection_duplicates: "跨集合重复图像", detection_identity: "图像、标签与划分身份", detection_train_coverage: "训练类别覆盖", detection_eval_coverage: "独立验收类别覆盖", detection_split_policy: "划分依据与限制" });
+phaseNames.visualizing = "生成检测对比图";
 const active = (job) => ["queued", "running", "cancelling"].includes(job.status);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const number = (value, places = 4) => Number.isFinite(value) ? value.toFixed(places) : "—";
@@ -32,7 +34,8 @@ function artifactUrl(url) { return url.split("/").map((part) => { try { return e
 function csrfToken() { return decodeURIComponent(document.cookie.split("; ").find((value) => value.startsWith("csrftoken="))?.split("=")[1] || ""); }
 
 async function selectDataset(identifier) {
-  state.datasetId = identifier; localStorage.setItem("odp-dataset", identifier);
+  state.datasetId = identifier; localStorage.setItem("odp-dataset-wsodd", identifier);
+  state.monitorChosen = false; state.monitorId = ""; state.defaults = null;
   await refresh();
 }
 
@@ -60,8 +63,10 @@ function route() {
 }
 
 function drawChart(history) {
+  const detection = (state.jobs.find((job) => job.id === state.monitorId)?.config?.backend || state.defaults?.backend) === "yolo";
   const series = state.chart === "loss"
     ? [{ label: "训练损失", color: "#198c70", values: history.map((row) => row.train_loss) }, { label: "验证损失", color: "#dfad57", values: history.map((row) => row.validation.loss) }]
+    : detection ? [{ label: "mAP50", color: "#198c70", values: history.map((row) => row.validation.mAP50) }, { label: "mAP50–95", color: "#7595b7", values: history.map((row) => row.validation.mAP50_95) }]
     : [{ label: "F1", color: "#198c70", values: history.map((row) => row.validation.F1) }, { label: "前景 IoU", color: "#7595b7", values: history.map((row) => row.validation.foreground_IoU) }, { label: "mIoU", color: "#dfad57", values: history.map((row) => row.validation.mIoU) }];
   $("#chart-legend").innerHTML = series.map((s) => `<span style="--series:${s.color}">${s.label}</span>`).join("");
   const width = 700, height = 225, left = 40, right = 18, top = 13, bottom = 25;
@@ -99,13 +104,17 @@ function renderOverview() {
     if ($(selector).innerHTML !== options) $(selector).innerHTML = options;
     $(selector).value = state.datasetId;
   }
-  const training = state.jobs.filter((job) => job.kind === "training");
+  const training = state.jobs.filter((job) => job.kind === "training" && job.config?.data === state.datasetId);
   if (!state.monitorChosen && training.length) {
     state.monitorId = (training.find(active) || training[0]).id;
     state.monitorChosen = true;
   }
   const monitored = state.jobs.find((job) => job.id === state.monitorId);
   const hardware = data.hardware;
+  const detection = data.dataset.task === "detect";
+  $("#dataset-task").textContent = detection ? "14 类目标检测" : "二值语义分割";
+  $("#recipe-summary").innerHTML = detection ? '<span>YOLOv8n</span><span>640 × 640</span><span>AdamW</span><span>14 类目标检测</span>' : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
+  $("#f1-target-label").hidden = detection;
   $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
   $("#device-name").textContent = hardware.connected ? hardware.device : "远程 GPU 未连接";
   $("#device-note").textContent = `远程 GPU · PyTorch ${hardware.torch} · ${hardware.connected ? "实时采样" : "等待连接"}`;
@@ -131,17 +140,18 @@ function renderOverview() {
   const options = '<option value="">新实验 / 待启动</option>' + training.map((job) => `<option value="${job.id}">${esc(job.name)} · ${statusNames[job.status]}</option>`).join("");
   if (select.innerHTML !== options) { select.innerHTML = options; select.value = state.monitorId; }
   renderMonitor();
-  $("#recent-jobs").innerHTML = jobTable(state.jobs, 3);
+  $("#recent-jobs").innerHTML = jobTable(state.jobs.filter((job) => job.config?.data === state.datasetId), 3);
   $("#all-jobs").innerHTML = jobTable(state.jobs, 100);
   $("#job-count").textContent = `${state.jobs.length} 个任务`;
   renderQuality(data.quality);
   const previous = $("#result-source").value;
-  const sources = '<option value="reference">官方权重参考结果</option>' + state.jobs.filter((job) => job.status === "completed").map((job) => `<option value="${job.id}">${esc(job.name)} · ${job.kind === "training" ? "训练验收" : "推理结果"}</option>`).join("");
-  if ($("#result-source").innerHTML !== sources) { $("#result-source").innerHTML = sources; $("#result-source").value = previous || "reference"; }
+  const completed = state.jobs.filter((job) => job.status === "completed" && job.config?.data === state.datasetId);
+  const sources = (detection ? '<option value="">等待本数据集训练或推理结果</option>' : '<option value="reference">官方权重参考结果</option>') + completed.map((job) => `<option value="${job.id}">${esc(job.name)} · ${job.kind === "training" ? "训练验收" : "推理结果"}</option>`).join("");
+  if ($("#result-source").innerHTML !== sources) { $("#result-source").innerHTML = sources; $("#result-source").value = completed.some((job) => job.id === previous) ? previous : completed[0]?.id || (detection ? "" : "reference"); }
   const modelValue = $("#infer-model").value;
-  const models = '<option value="official">官方 CrackMap 参考权重</option>' + state.jobs.filter((job) => job.kind === "training" && job.status === "completed").map((job) => `<option value="trained:${job.id}">${esc(job.name)} · best</option>`).join("");
-  if ($("#infer-model").innerHTML !== models) { $("#infer-model").innerHTML = models; $("#infer-model").value = modelValue; }
-  $("#run-inference").disabled = !hardware.cuda_available || !state.uploadId || state.jobs.some(active);
+  const models = (detection ? '<option value="">训练完成后选择 WSODD 权重</option>' : '<option value="official">官方 CrackMap 参考权重</option>') + completed.filter((job) => job.kind === "training").map((job) => `<option value="trained:${job.id}">${esc(job.name)} · best</option>`).join("");
+  if ($("#infer-model").innerHTML !== models) { $("#infer-model").innerHTML = models; $("#infer-model").value = modelValue; if (!$("#infer-model").value && completed.some((job) => job.kind === "training")) $("#infer-model").value = `trained:${completed.find((job) => job.kind === "training").id}`; }
+  $("#run-inference").disabled = !hardware.cuda_available || !state.uploadId || !$("#infer-model").value || state.jobs.some(active);
   const inferJob = state.jobs.find((job) => job.id === state.inferId);
   if (inferJob) {
     $("#infer-feedback").textContent = `${statusNames[inferJob.status]}${inferJob.error ? " · " + inferJob.error : ""}`;
@@ -162,7 +172,10 @@ function renderMonitor() {
   $("#training-dot").classList.toggle("running", Boolean(job && active(job)));
   $("#metric-epoch").innerHTML = `${history.length || "—"} <small>/ ${epochs}</small>`;
   $("#metric-loss").textContent = number(last?.train_loss);
-  $("#metric-f1").textContent = percent(last?.validation?.F1);
+  const detection = (job?.config?.backend || state.defaults?.backend) === "yolo";
+  $("#metric-score-label").textContent = detection ? "最近一轮验证 mAP50–95" : "最近一轮验证 F1";
+  $("#metric-score-note").textContent = detection ? "检测框 IoU 0.50–0.95 · 测试指标见结果页" : "固定阈值 0.5 · 测试指标见结果页";
+  $("#metric-f1").textContent = percent(detection ? last?.validation?.mAP50_95 : last?.validation?.F1);
   $("#metric-time").textContent = duration(job?.elapsed_seconds);
   $("#metric-eta").textContent = job?.status === "completed" ? "实验已结束" : job?.eta_seconds ? `预计剩余 ${duration(job.eta_seconds)}` : "启动后显示预计剩余时间";
   $("#metric-epoch-note").textContent = job ? `${phaseNames[job.phase] || job.phase}${job.epoch ? ` · 第 ${job.epoch} 轮` : ""}` : "完整训练";
@@ -182,10 +195,10 @@ function renderQuality(quality) {
   const severity = quality?.overall_severity || "未检查";
   $("#quality-badge").textContent = errors.length ? "需修复" : warning.length ? "风险提示" : quality ? "通过" : "未检查";
   $("#quality-badge").className = `badge ${errors.length ? "danger" : warning.length ? "warning" : "success"}`;
-  $("#quality-summary").innerHTML = quality ? `<div class="summary-line"><strong>${checks.length - warning.length - errors.length}</strong> 项检查通过 / ${checks.length} 项</div><div class="summary-copy ${warning.length ? "risk" : ""}">${errors.length ? "存在错误，需处理后训练。" : warning.length ? "存在潜在同源跨集风险，详见质检报告。" : "未发现阻断问题。"}</div>` : empty("暂无质检记录", "前往数据页运行检查。");
+  $("#quality-summary").innerHTML = quality ? `<div class="summary-line"><strong>${checks.length - warning.length - errors.length}</strong> 项检查通过 / ${checks.length} 项</div><div class="summary-copy ${warning.length ? "risk" : ""}">${errors.length ? "存在错误，需处理后训练。" : warning.length ? "存在数据划分或类别覆盖限制，详见质检报告。" : "未发现阻断问题。"}</div>` : empty("暂无质检记录", "前往数据页运行检查。");
   $("#data-dot").hidden = !warning.length && !errors.length;
   const split = state.overview.dataset.splits;
-  $("#data-metrics").innerHTML = [["训练集", split.train, "用于模型参数学习"], ["验证集", split.val, "用于选择 best 权重"], ["测试集", split.test, "独立效果验收"], ["质检结果", severity, `${checks.length} 项语义数据检查`]].map(([label, value, note]) => `<article class="metric-card"><span>${label}</span><strong>${esc(value)}</strong><div>${note}</div></article>`).join("");
+  $("#data-metrics").innerHTML = [["训练集", split.train, "用于模型参数学习"], ["验证集", split.val, "用于选择 best 权重"], ["测试集", split.test, "独立效果验收"], ["质检结果", severity, `${checks.length} 项数据检查`]].map(([label, value, note]) => `<article class="metric-card"><span>${label}</span><strong>${esc(value)}</strong><div>${note}</div></article>`).join("");
   $("#quality-checks").innerHTML = checks.length ? checks.map((row) => `<div class="check-row"><div><strong>${esc(checkNames[row.name] || row.name)}</strong><p>${esc(row.summary)}</p></div>${badge({ PASS: "通过", INFO: "信息", WARNING: "风险提示", ERROR: "错误" }[row.severity], row.severity === "ERROR" ? "danger" : row.severity === "WARNING" ? "warning" : "success")}</div>`).join("") : empty("尚未检查", "点击重新质检检查当前数据集。");
   const groups = checks.find((row) => row.name === "mask_source_group_overlap")?.details?.groups || {};
   $("#source-groups").innerHTML = Object.entries(groups).map(([name, splits]) => `<span>${esc(name)} · ${esc(splits.join(" / "))}</span>`).join("") || '<span>无分组风险记录</span>';
@@ -196,6 +209,7 @@ async function refresh(silent = false) {
   state.busy = true;
   try {
     state.overview = await api(`/api/overview?dataset=${encodeURIComponent(state.datasetId)}`); state.jobs = state.overview.jobs;
+    if (!state.defaults) state.defaults = (await api(`/api/config?dataset=${encodeURIComponent(state.datasetId)}`)).defaults;
     window.dispatchEvent(new CustomEvent("odp:overview", { detail: state.overview }));
     $("#connection-dot").classList.add("connected"); $("#connection-text").textContent = "服务已连接";
     renderOverview();
@@ -216,8 +230,9 @@ async function showDetail(id, navigate = true) {
   if (navigate) location.hash = "experiments";
 }
 
-async function loadGallery() {
-  const source = $("#result-source").value || "reference";
+async function loadGallery(selected) {
+  const source = typeof selected === "string" ? selected : $("#result-source").value;
+  if (!source) { state.gallery = []; $("#gallery-preview").innerHTML = empty("等待 WSODD 实验结果", "远程训练和独立测试完成后，显示检测框、类别指标与曲线。"); $("#evaluation-metrics").innerHTML = ""; $("#result-downloads").innerHTML = ""; $("#gallery-tools").hidden = true; $("#gallery-thumbnails").innerHTML = ""; return; }
   state.source = source; $("#result-panel-label").textContent = source === "reference" || state.jobs.find((job) => job.id === source)?.kind === "training" ? "原图 · GT · 预测 · 误差" : "原图 · 概率 · 预测"; $("#evaluation-metrics").innerHTML = ""; $("#result-downloads").innerHTML = "";
   if (source === "reference") {
     const data = await api("/api/reference"); state.gallery = data.images;
@@ -226,9 +241,11 @@ async function loadGallery() {
     const artifacts = await api(`/api/jobs/${source}/artifacts`);
     state.gallery = artifacts.filter((entry) => entry.path.includes("comparisons/") && entry.name.endsWith(".png"));
     const job = state.jobs.find((row) => row.id === source);
-    $("#gallery-description").textContent = job?.kind === "training" ? "本次训练最佳权重 · 独立 test 集验收" : "图片推理结果 · 无 GT 时展示概率图与预测叠加";
-    if (job?.metrics) $("#evaluation-metrics").innerHTML = [["F1", job.metrics.F1], ["前景 IoU", job.metrics.foreground_IoU], ["mIoU", job.metrics.mIoU], ["精确率", job.metrics.precision], ["召回率", job.metrics.recall]].map(([label, value]) => `<div>${label}<strong>${percent(value)}</strong></div>`).join("");
-    $("#result-downloads").innerHTML = artifacts.filter((entry) => ["report.json", "report.md", "per_image.csv", "training_curves.png", "best.pth"].includes(entry.name)).map((entry) => `<a href="${artifactUrl(entry.url)}?download=true" download>${esc(entry.name)} ↓</a>`).join("");
+    const detection = job?.config?.backend === "yolo";
+    $("#result-panel-label").textContent = detection ? "标注框 GT · 预测框" : "原图 · GT · 预测 · 误差";
+    $("#gallery-description").textContent = job?.kind === "training" ? `${job.dataset_name || job.config?.data} 最佳权重 · 独立 test 验收${detection ? " · 展示最多 48 张对比图" : ""}` : detection ? "图片推理结果 · 水面目标与置信度" : "历史分割推理结果";
+    if (job?.metrics) $("#evaluation-metrics").innerHTML = (detection ? [["mAP50", job.metrics.mAP50], ["mAP50–95", job.metrics.mAP50_95], ["精确率", job.metrics.precision], ["召回率", job.metrics.recall]] : [["F1", job.metrics.F1], ["前景 IoU", job.metrics.foreground_IoU], ["mIoU", job.metrics.mIoU], ["精确率", job.metrics.precision], ["召回率", job.metrics.recall]]).map(([label, value]) => `<div>${label}<strong>${percent(value)}</strong></div>`).join("");
+    $("#result-downloads").innerHTML = artifacts.filter((entry) => ["report.json", "report.md", "per_image.csv", "per_class.csv", "training_curves.png", "best.pth", "best.pt", "confusion_matrix.png", "BoxPR_curve.png"].includes(entry.name)).map((entry) => `<a href="${artifactUrl(entry.url)}?download=true" download>${esc(entry.name)} ↓</a>`).join("");
     if (job?.kind === "training" && job.quality_status === "needs_review") $("#gallery-description").textContent += " · 未设精度目标，效果待人工评审";
     if (job?.kind === "training" && job.quality_status === "failed") $("#gallery-description").textContent += " · 未达到配置的 F1 验收目标";
     if (job?.kind === "training" && job.quality_status === "passed") $("#gallery-description").textContent += " · 达到配置的 F1 验收目标";
@@ -241,7 +258,7 @@ async function loadGallery() {
 
 function displayImage(index) {
   const entry = state.gallery[index];
-  $("#gallery-preview").innerHTML = entry ? `<a href="${artifactUrl(entry.url)}" target="_blank" rel="noreferrer" title="打开原尺寸图片"><img src="${artifactUrl(entry.url)}" alt="分割对比结果 ${esc(entry.name)}，点击查看原尺寸"></a>` : empty("暂无可视化产物", "完整训练或图片推理完成后，可在这里查看结果。");
+  $("#gallery-preview").innerHTML = entry ? `<a href="${artifactUrl(entry.url)}" target="_blank" rel="noreferrer" title="打开原尺寸图片"><img src="${artifactUrl(entry.url)}" alt="模型对比结果 ${esc(entry.name)}，点击查看原尺寸"></a>` : empty("暂无可视化产物", "完整训练或图片推理完成后，可在这里查看结果。");
   $("#gallery-image").value = String(index);
   if (entry) { $("#download-result").href = artifactUrl(entry.url); $("#download-result").download = entry.name; }
   $$(".thumbnail").forEach((button) => button.classList.toggle("selected", Number(button.dataset.image) === index));
@@ -255,22 +272,27 @@ async function uploadImage(file) {
     const form = new FormData(); form.append("file", file);
     const data = await api("/api/uploads", { method: "POST", body: form }); state.uploadId = data.id;
     $("#upload-description").textContent = `${file.name} · ${data.width} × ${data.height}`;
-    $("#run-inference").disabled = !state.overview.hardware.cuda_available || state.jobs.some(active);
+    $("#run-inference").disabled = !state.overview.hardware.cuda_available || !$("#infer-model").value || state.jobs.some(active);
   } catch (error) { state.uploadId = null; $("#upload-description").textContent = "上传失败，请重新选择图片"; $("#run-inference").disabled = true; toast(error.message, true); }
 }
 
 function draft() {
   const values = new FormData($("#training-form"));
-  return { name: values.get("name"), config: { ...state.defaults, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
+  return { name: values.get("name"), config: { ...state.defaults, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: state.defaults.backend === "yolo" || values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
 }
 
 function openConfig() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem("odp-training-draft")); } catch (_) { /* 无合法草稿时采用默认配方 */ }
+  if (saved?.config?.data !== state.datasetId || saved?.config?.backend !== state.defaults.backend) saved = null;
   if (saved) {
     const form = $("#training-form"); form.elements.name.value = saved.name;
     for (const field of ["epochs", "batch_size_train", "lr", "seed"]) form.elements[field].value = saved.config[field];
     form.elements.min_f1.value = saved.min_f1 ?? "";
+  } else {
+    const form = $("#training-form");
+    for (const field of ["epochs", "batch_size_train", "lr", "seed"]) form.elements[field].value = state.defaults[field];
+    form.elements.min_f1.value = "";
   }
   if (!saved || saved.config.data !== state.datasetId) $("#training-form").elements.name.value = `${state.overview.dataset.name} 完整实验`;
   $("#training-dataset").value = state.datasetId;
@@ -285,7 +307,7 @@ document.addEventListener("click", async (event) => {
     if (button.dataset.chart) { state.chart = button.dataset.chart; $$("[data-chart]").forEach((item) => item.classList.toggle("selected", item === button)); renderMonitor(); }
     if (button.dataset.detail) await showDetail(button.dataset.detail);
     if (button.dataset.monitor) { state.monitorId = button.dataset.monitor; state.monitorChosen = true; $("#monitor-job").value = state.monitorId; location.hash = "overview"; renderOverview(); }
-    if (button.dataset.results) { $("#result-source").value = button.dataset.results; location.hash = "results"; await loadGallery(); }
+    if (button.dataset.results) { $("#result-source").value = button.dataset.results; location.hash = "results"; await loadGallery(button.dataset.results); }
     if (button.dataset.cancel) { await api(`/api/jobs/${button.dataset.cancel}/cancel`, { method: "POST" }); toast("已请求停止，等待当前计算结束"); await refresh(); }
     if (button.dataset.log) {
       const response = await fetch(`/api/jobs/${button.dataset.log}/files/worker.log`);
@@ -323,9 +345,9 @@ $("#infer-threshold").addEventListener("input", (event) => { $("#threshold-value
 $("#run-inference").addEventListener("click", async () => {
   $("#run-inference").disabled = true;
   try {
-    const request = { kind: "inference", name: "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, config: { threshold: Number($("#infer-threshold").value) } };
+    const request = { kind: "inference", name: state.overview.dataset.task === "detect" ? "WSODD 水面目标检测" : "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, config: { threshold: Number($("#infer-threshold").value) } };
     const job = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
-    state.inferId = job.id; $("#infer-feedback").textContent = "推理任务已提交…"; await refresh(); toast("正在生成分割结果");
+    state.inferId = job.id; $("#infer-feedback").textContent = "推理任务已提交…"; await refresh(); toast("正在生成检测或分割结果");
   } catch (error) { toast(error.message, true); renderOverview(); }
 });
 $("#result-source").addEventListener("change", () => loadGallery().catch((error) => toast(error.message, true)));
@@ -334,7 +356,7 @@ window.addEventListener("hashchange", route);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(true); });
 
 async function initialize() {
-  try { state.defaults = (await api("/api/config")).defaults; } catch (error) { toast(error.message, true); }
+  try { state.defaults = (await api(`/api/config?dataset=${encodeURIComponent(state.datasetId)}`)).defaults; } catch (error) { toast(error.message, true); }
   try { state.draft = JSON.parse(localStorage.getItem("odp-training-draft")); } catch (_) { /* 默认配置 */ }
   await refresh(); route();
   setInterval(() => { if (!document.hidden) refresh(true); }, 4000);

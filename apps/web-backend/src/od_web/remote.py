@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 
@@ -101,17 +102,20 @@ class Connection:
     def put(self, source: Path, target: PurePosixPath):
         self.mkdir(target.parent)
         # 输入按内容核验,重连不重复传输相同文件。
-        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        digest = hashlib.sha256()
+        with source.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024): digest.update(chunk)
+        checksum = digest.hexdigest()
         marker = str(target) + ".sha256"
         try:
             if self.sftp.stat(str(target)).st_size == source.stat().st_size:
                 with self.sftp.open(marker) as stream:
-                    if stream.read().decode() == digest: return
+                    if stream.read().decode() == checksum: return
         except FileNotFoundError: pass
         temporary = str(target) + ".upload"
         self.sftp.put(str(source), temporary)
         self.sftp.posix_rename(temporary, str(target))
-        with self.sftp.open(marker, "w") as stream: stream.write(digest)
+        with self.sftp.open(marker, "w") as stream: stream.write(checksum)
 
     def put_json(self, value: dict, target: PurePosixPath):
         self.mkdir(target.parent)
@@ -173,8 +177,25 @@ def prepare(connection: Connection, directory: Path, request: dict):
     document = {**request, "config": {**request["config"], "device": "cuda", "scan_backend": "reference"}, "require_cuda": True}
     if request["kind"] == "training":
         yaml_path = paths.dataset_yaml_path(request["config"]["data"])
-        dataset, root = load_semantic_dataset(yaml_path)
-        targets = [yaml_path, *sorted(root.rglob("*.png")), paths.ROOT_DIR / dataset["manifest_path"]]
+        if request["config"].get("backend") == "yolo":
+            import yaml
+            dataset = yaml.safe_load(yaml_path.read_text(encoding="utf-8")); root = paths.ROOT_DIR / dataset["path"]
+            # 约 1.8 GB、上万文件使用单个受控包传输,避免逐文件往返。
+            bundle = directory / "dataset.tar"
+            targets = [yaml_path, *sorted(root.rglob("*.jpg")), *sorted(root.rglob("*.txt")), paths.ROOT_DIR / dataset["manifest_path"]]
+            pretrained = paths.PRETRAINED_MODELS_DIR / request["config"]["architecture"]
+            if pretrained.is_file(): targets.append(pretrained)
+            if not bundle.exists():
+                with tarfile.open(bundle.with_suffix(".building"), "w") as archive:
+                    for source in targets:
+                        if source.is_symlink() or not source.resolve().is_relative_to(paths.ROOT_DIR.resolve()): raise ValueError("检测数据超出项目目录")
+                        archive.add(source, arcname=source.relative_to(paths.ROOT_DIR).as_posix())
+                bundle.with_suffix(".building").replace(bundle)
+            connection.put(bundle, remote / "runs/web_jobs" / directory.name / "dataset.tar")
+            connection.command(["unpack", directory.name]); targets = []
+        else:
+            dataset, root = load_semantic_dataset(yaml_path)
+            targets = [yaml_path, *sorted(root.rglob("*.png")), paths.ROOT_DIR / dataset["manifest_path"]]
         for source in targets:
             if source.is_symlink() or not source.resolve().is_relative_to(paths.ROOT_DIR.resolve()):
                 raise ValueError("数据集输入超出项目目录")
@@ -185,7 +206,7 @@ def prepare(connection: Connection, directory: Path, request: dict):
         target = remote / "runs/web_uploads" / source.name
         connection.put(source, target); document["source"] = str(target)
         weight = Path(request["config"]["model"])
-        target = remote / "models/web" / (directory.name + ".pth")
+        target = remote / "models/web" / (directory.name + weight.suffix)
         connection.put(weight, target); document["config"]["model"] = str(target)
     remote_job = remote / "runs/web_jobs" / directory.name
     connection.put_json(document, remote_job / "request.json")
@@ -266,9 +287,11 @@ def bridge(directory: Path):
                     connection.tree(remote / run, paths.ROOT_DIR / str(run))
                 if final["status"] == "completed" and request["kind"] == "training":
                     connection.tree(remote_job / "evaluation", directory / "evaluation")
-                    archive = paths.TRAINED_MODELS_DIR / ("mixercseg-remote-" + directory.name + "-best.pth")
+                    detection = request["config"].get("backend") == "yolo"
+                    filename = "best.pt" if detection else "best.pth"
+                    archive = paths.TRAINED_MODELS_DIR / (("yolo-remote-" if detection else "mixercseg-remote-") + directory.name + "-" + filename)
                     archive.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(paths.ROOT_DIR / final["run_dir"] / "weights/best.pth", archive)
+                    shutil.copy2(paths.ROOT_DIR / final["run_dir"] / "weights" / filename, archive)
                     final["remote_best_weight"] = final.get("best_weight"); final["best_weight"] = str(archive)
                 final["artifacts_synced_at"] = utc_now()
                 write_json(directory / "status.json", final)

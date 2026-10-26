@@ -10,7 +10,7 @@ import streamlit as st
 API_URL = os.environ.get("ODP_API_URL", "http://127.0.0.1:8000")
 st.set_page_config(page_title="ODPlatform · 算法工作台", page_icon=":material/monitoring:", layout="wide")
 st.title("算法工作台")
-st.caption("MixerCSeg / CrackMap · 训练实验、数据质量与分割结果")
+st.caption("YOLOv8 / WSODD · 水面目标检测、训练监控与独立测试")
 
 
 @st.cache_resource
@@ -54,12 +54,12 @@ if view == "训练监控":
     with st.expander("配置完整训练"):
         with st.form("new_experiment"):
             available = {row["id"]: row["name"] for row in overview.get("datasets", []) if row.get("trainable")}
-            dataset = st.selectbox("训练数据集", list(available) or ["crackmap"], format_func=lambda key: available.get(key, key))
-            name = st.text_input("实验名称", "CrackMap 完整实验")
+            dataset = st.selectbox("训练数据集", list(available) or ["wsodd"], format_func=lambda key: available.get(key, key))
+            name = st.text_input("实验名称", "WSODD 完整实验")
             col1, col2, col3 = st.columns(3)
             epochs = col1.number_input("训练轮次", min_value=1, max_value=1000, value=50)
-            batch = col2.number_input("批大小", min_value=1, max_value=64, value=1)
-            lr = col3.number_input("学习率", min_value=0.000002, max_value=1.0, value=0.0005, format="%.6f")
+            batch = col2.number_input("批大小", min_value=1, max_value=64, value=16)
+            lr = col3.number_input("学习率", min_value=0.000002, max_value=1.0, value=0.001, format="%.6f")
             submitted = st.form_submit_button("开始完整实验", type="primary", disabled=not overview["hardware"]["cuda_available"])
         if submitted:
             response = post("/api/jobs", {"kind": "training", "name": name,
@@ -75,7 +75,7 @@ if view == "训练监控":
         try: jobs = get("/api/jobs")
         except httpx.HTTPError:
             st.warning("监控连接暂时中断，稍后自动重试。"); return
-        jobs = [job for job in jobs if job["kind"] == "training"]
+        jobs = [job for job in jobs if job["kind"] == "training" and job.get("config", {}).get("data") == "wsodd"]
         if not jobs:
             st.info("尚无完整训练任务。GPU 就绪后可提交实验。")
             return
@@ -85,7 +85,7 @@ if view == "训练监控":
         with st.container(horizontal=True):
             st.metric("完成轮次", f"{len(history)} / {job['config']['epochs']}", border=True)
             st.metric("训练损失", f"{history[-1]['train_loss']:.4f}" if history else "—", border=True)
-            st.metric("验证 F1", f"{history[-1]['validation']['F1']:.1%}" if history else "—", border=True)
+            st.metric("验证 mAP50–95", f"{history[-1]['validation']['mAP50_95']:.1%}" if history else "—", border=True)
         st.progress(min(1.0, max(0.0, job.get("progress", 0))), text=job["phase"])
         if history:
             frame = pd.DataFrame([{"Epoch": row["epoch"], "训练损失": row["train_loss"], "验证损失": row["validation"]["loss"]} for row in history])
@@ -96,13 +96,15 @@ elif view == "数据质量":
     quality = overview.get("quality")
     if quality:
         st.dataframe(pd.DataFrame([{"检查项": row["name"], "等级": row["severity"], "说明": row["summary"]} for row in quality["results"]]),
-                     hide_index=True, alt="CrackMap 数据质量检查结果")
-        st.caption("潜在同源跨集风险需要采集记录确认；当前保留官方划分。")
+                     hide_index=True, alt="WSODD 数据质量检查结果")
+        st.caption("按相机与采集日推断分组划分；缺失类别的独立验收指标为空。")
     else: st.info("暂无质检报告，可在监控面板运行检查。")
 else:
     try:
-        jobs = [job for job in get("/api/jobs") if job["status"] == "completed"]
-        options = {"reference": "官方权重参考结果", **{job["id"]: job["name"] for job in jobs}}
+        jobs = [job for job in get("/api/jobs") if job["status"] == "completed" and job.get("config", {}).get("data") == "wsodd"]
+        options = {job["id"]: job["name"] for job in jobs}
+        if not options:
+            st.info("WSODD 训练或推理完成后在这里展示检测结果。"); st.stop()
         source = st.selectbox("结果来源", list(options), format_func=lambda key: options[key])
         if source == "reference":
             images = get("/api/reference")["images"]
@@ -112,7 +114,7 @@ else:
             job = next(job for job in jobs if job["id"] == source)
             if job.get("metrics"):
                 with st.container(horizontal=True):
-                    for key in ("F1", "foreground_IoU", "precision", "recall"):
+                    for key in ("mAP50", "mAP50_95", "precision", "recall"):
                         st.metric(key, f"{job['metrics'][key]:.1%}", border=True)
         if images:
             image = st.selectbox("图片", range(len(images)), format_func=lambda index: images[index]["name"])

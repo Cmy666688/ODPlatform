@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import threading
+import tarfile
 
 from od_platform.common import paths
 from od_platform.common.json_io import write_json
@@ -29,10 +30,9 @@ def hardware() -> dict:
     try:
         importlib.import_module("selective_scan_cuda_oflex")
         result["scan_available"] = True
-    except ImportError:
+    except (ImportError, OSError):
         result["scan_available"] = False
-    result.update(execution="remote", connected=True,
-                  cuda_available=result["cuda_available"] and result["scan_available"])
+    result.update(execution="remote", connected=True)
     return result
 
 
@@ -65,16 +65,24 @@ def launch(job_id: str) -> dict:
             write_json(directory / "status.json", state)
             result: dict = {"cancelled": True}; write_json(marker, result)
             return result
-        if not hardware()["cuda_available"]: raise RuntimeError("远程 CUDA 或扫描内核未就绪")
         request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
+        device = hardware()
+        if not device["cuda_available"] or (request["config"].get("backend") != "yolo" and not device["scan_available"]):
+            raise RuntimeError("远程 CUDA 或所需扫描内核未就绪")
         if request["config"]["device"] != "cuda" or request["config"]["scan_backend"] != "reference":
             raise ValueError("远程任务必须使用 CUDA 和原版扫描内核")
         if request["kind"] == "training":
             from od_platform.common import refs
             from od_platform.data_validation.semantic import validate_semantic_dataset
-            report = validate_semantic_dataset(refs.resolve_dataset_yaml(request["config"]["data"]))
-            if report.overall_severity == "ERROR": raise ValueError("远程数据集身份或质检不通过")
-            if report.snapshot.data_fingerprint != request["dataset_fingerprint"]:
+            if request["config"].get("backend") == "yolo":
+                from od_platform.data_pipeline.wsodd import validate
+                detection_report = validate(refs.resolve_dataset_yaml(request["config"]["data"]))
+                severity, fingerprint = detection_report["overall_severity"], detection_report["data_fingerprint"]
+            else:
+                report = validate_semantic_dataset(refs.resolve_dataset_yaml(request["config"]["data"]))
+                severity, fingerprint = report.overall_severity, report.snapshot.data_fingerprint
+            if severity == "ERROR": raise ValueError("远程数据集身份或质检不通过")
+            if fingerprint != request["dataset_fingerprint"]:
                 raise ValueError("远程与本机数据集指纹不一致")
         state["config"] = request["config"]
         write_json(directory / "status.json", state)
@@ -116,8 +124,25 @@ def snapshot(job_id: str) -> dict:
     return JobStore().read(job_id)
 
 
+def unpack(job_id):
+    from .jobs import JobStore
+    from od_platform.data_pipeline.import_dataset import safe_relative
+    import shutil
+    directory = JobStore().directory(job_id)
+    with tarfile.open(directory / "dataset.tar") as archive:
+        for member in archive:
+            relative = safe_relative(member.name)
+            if not member.isfile() or member.size > 64*1024**2: raise ValueError("非法检测数据包成员")
+            if not (relative.as_posix().startswith("data/processed/wsodd/") or relative.as_posix() in ("apps/platform/configs/datasets/wsodd.yaml", "models/pretrained/yolov8n.pt")):
+                raise ValueError("检测数据包路径不被允许")
+            target = paths.ROOT_DIR / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.extractfile(member) as source, target.open("wb") as output: shutil.copyfileobj(source, output)
+    return {"unpacked": True}
+
+
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument("action", choices=["hardware", "check", "launch", "run", "snapshot"])
+    parser = argparse.ArgumentParser(); parser.add_argument("action", choices=["hardware", "check", "launch", "run", "snapshot", "unpack"])
     parser.add_argument("job_id", nargs="?"); args = parser.parse_args()
     if args.action == "hardware": result = hardware()
     elif args.action == "check":
@@ -128,6 +153,7 @@ def main():
         result["runtime_ready"] = True
     elif args.action == "launch": result = launch(args.job_id)
     elif args.action == "snapshot": result = snapshot(args.job_id)
+    elif args.action == "unpack": result = unpack(args.job_id)
     else: raise SystemExit(run(args.job_id))
     print("ODP_JSON=" + json.dumps(result, ensure_ascii=False), flush=True)
 

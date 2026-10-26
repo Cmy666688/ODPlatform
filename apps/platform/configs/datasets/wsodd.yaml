@@ -1,0 +1,23 @@
+format: yolo_detect
+task: detect
+path: data/processed/wsodd
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: boat
+  1: ship
+  2: person
+  3: bridge
+  4: rock
+  5: ball
+  6: platform
+  7: rubbish
+  8: mast
+  9: harbor
+  10: animal
+  11: buoy
+  12: tree
+  13: grass
+data_fingerprint: 32aa25208e93f3055f2dddcccf214d7422f62b759113b1a0644cbc02b344ab0b
+manifest_path: data/processed/wsodd/manifest.json

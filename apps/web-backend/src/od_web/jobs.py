@@ -100,6 +100,6 @@ class JobStore:
         candidate = (root / relative).resolve()
         if not candidate.is_relative_to(root.resolve()) or not candidate.is_file():
             raise FileNotFoundError("产物不存在")
-        if candidate.suffix.lower() not in (".json", ".csv", ".md", ".png", ".jpg", ".pth", ".log"):
+        if candidate.suffix.lower() not in (".json", ".csv", ".md", ".png", ".jpg", ".pth", ".pt", ".log"):
             raise ValueError("不支持的产物格式")
         return candidate

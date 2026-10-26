@@ -20,17 +20,31 @@ MAX_UPLOAD = 512 * 1024**2
 
 
 def dataset_yaml(identifier: str) -> Path:
-    if identifier != "crackmap" and not Dataset.objects.filter(pk=identifier).exists():
+    if identifier not in ("crackmap", "wsodd") and not Dataset.objects.filter(pk=identifier).exists():
         raise ValueError("数据集不存在,请先导入数据集")
     return paths.dataset_yaml_path(identifier)
 
 
 def describe(identifier: str) -> dict:
+    if identifier == "wsodd":
+        import yaml
+        yaml_path = paths.dataset_yaml_path("wsodd")
+        value: dict = {"id": "wsodd", "name": "WSODD", "task": "detect", "status": "ready", "phase": "水面目标检测", "progress": 1,
+                 "source_name": "WSODD USV_dataset.zip", "error": "", "available": False, "splits": {"train": 0, "val": 0, "test": 0}, "quality": None}
+        if yaml_path.exists():
+            document = yaml.safe_load(yaml_path.read_text(encoding="utf-8")); root = paths.ROOT_DIR / document["path"]
+            value.update(available=root.exists(), fingerprint=document["data_fingerprint"], names=document["names"],
+                         splits={s: len(list((root / "images" / s).glob("*.jpg"))) for s in ("train", "val", "test")})
+            report = paths.RUNS_DIR / "data_validation/wsodd/report.json"
+            if report.exists(): value["quality"] = json.loads(report.read_text(encoding="utf-8"))
+            if value["quality"] and value["quality"]["overall_severity"] == "ERROR": value["status"] = "blocked"
+        value["trainable"] = value["available"] and value["status"] == "ready" and bool(value["quality"])
+        return value
     record = Dataset.objects.filter(pk=identifier).first()
     if record is None and identifier != "crackmap": raise ValueError("数据集不存在")
     if record and record.status == "importing" and record.pid and not psutil.pid_exists(record.pid):
         record.status = "failed"; record.error = "导入进程已退出,请查看格式说明并重新导入"; record.save(update_fields=["status", "error"])
-    value: dict = {"id": identifier, "name": record.name if record else "CrackMap", "status": record.status if record else "ready",
+    value = {"id": identifier, "name": record.name if record else "CrackMap", "task": "semantic_segment", "status": record.status if record else "ready",
              "phase": record.phase if record else "已有数据集", "progress": record.progress if record else 1,
              "source_name": record.source_name if record else "MixerCSeg / CrackMap", "error": record.error if record else "",
              "available": False, "splits": {"train": 0, "val": 0, "test": 0}, "quality": record.report if record else None}
@@ -47,10 +61,13 @@ def describe(identifier: str) -> dict:
 
 
 def listing() -> list[dict]:
-    return [describe("crackmap"), *[describe(key) for key in Dataset.objects.values_list("id", flat=True)]]
+    return [describe("wsodd"), *[describe(key) for key in Dataset.objects.values_list("id", flat=True)]]
 
 
 def validate(identifier: str) -> dict:
+    if identifier == "wsodd":
+        from od_platform.data_pipeline.wsodd import validate as validate_detection
+        detection_report: dict = validate_detection(dataset_yaml(identifier)); return detection_report
     report = validate_semantic_dataset(dataset_yaml(identifier), run_id=identifier).to_dict()
     Dataset.objects.filter(pk=identifier).update(report=report, status="blocked" if report["overall_severity"] == "ERROR" else "ready")
     return report

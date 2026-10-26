@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from od_platform.common import paths
 from od_platform.runtime_config.mixercseg import MixerCSegConfig, load_mixercseg_config
+from od_platform.runtime_config.detection import DetectionConfig
 
 from . import app, datasets
 from .forms import DatasetUploadForm
@@ -59,14 +60,15 @@ def health(request): return {"status": "ok", "framework": "django", "hardware": 
 
 @endpoint(["GET"])
 def config(request):
-    defaults = load_mixercseg_config("mixercseg_full", {"device": "cuda", "scan_backend": "reference"})
-    return {"defaults": defaults.model_dump(), "schema": MixerCSegConfig.model_json_schema(), "execution": "remote"}
+    semantic = request.GET.get("dataset", "wsodd") != "wsodd"
+    defaults = load_mixercseg_config("mixercseg_full", {"device": "cuda", "scan_backend": "reference"}) if semantic else DetectionConfig()
+    return {"defaults": defaults.model_dump(), "schema": (MixerCSegConfig if semantic else DetectionConfig).model_json_schema(), "execution": "remote"}
 
 
 @endpoint(["GET"])
 def overview(request):
     choices = datasets.listing()
-    selected = request.GET.get("dataset", "crackmap")
+    selected = request.GET.get("dataset", "wsodd")
     dataset = next((row for row in choices if row["id"] == selected), None)
     if dataset is None: raise ApiError(404, "数据集不存在")
     return {"framework": "django", "hardware": app._hardware(), "dataset": dataset, "datasets": choices,
@@ -91,6 +93,20 @@ def validate(request, identifier): return datasets.validate(identifier)
 
 @endpoint(["GET"])
 def dataset_preview(request, identifier, split, filename, kind):
+    if identifier == "wsodd":
+        import io
+        from od_platform.common.semantic import read_bgr
+        from od_platform.training.detection_experiment import draw_boxes
+        from od_platform.data_pipeline.wsodd import NAMES
+        import cv2
+        if split not in ("train", "val", "test") or Path(filename).name != filename or not filename.endswith(".jpg") or kind not in ("images", "masks"):
+            raise ApiError(404, "预览不存在")
+        root = paths.PROCESSED_DATA_DIR / "wsodd"
+        image = root / "images" / split / filename
+        if kind == "images": return FileResponse(image.open("rb"), content_type="image/jpeg")
+        rows = [[float(v) for v in line.split()] for line in (root / "labels" / split / (Path(filename).stem + ".txt")).read_text().splitlines()]
+        _, encoded = cv2.imencode(".jpg", draw_boxes(read_bgr(image), rows, NAMES))
+        return FileResponse(io.BytesIO(encoded.tobytes()), content_type="image/jpeg")
     if split not in ("train", "val", "test") or kind not in ("images", "masks"): raise ApiError(404, "预览不存在")
     from od_platform.common.semantic import load_semantic_dataset
     _, root = load_semantic_dataset(datasets.dataset_yaml(identifier))
@@ -102,6 +118,11 @@ def dataset_preview(request, identifier, split, filename, kind):
 
 @endpoint(["GET"])
 def previews(request, identifier):
+    if identifier == "wsodd":
+        root = paths.PROCESSED_DATA_DIR / "wsodd"
+        return [{"name": path.name, "split": split, "image": f"/api/datasets/wsodd/preview/images/{split}/{quote(path.name)}",
+                 "mask": f"/api/datasets/wsodd/preview/masks/{split}/{quote(path.name)}", "annotation_type": "boxes"}
+                for split in ("train", "val", "test") for path in sorted((root / "images" / split).glob("*.jpg"))[:4]]
     from od_platform.common.semantic import load_semantic_dataset
     document, root = load_semantic_dataset(datasets.dataset_yaml(identifier))
     return [{"name": path.name, "split": split,
@@ -119,10 +140,14 @@ def jobs(request):
     configuration.device = "cuda"; configuration.scan_backend = "reference"
     submitted.require_cuda = True
     if submitted.kind == "training":
+        if configuration.backend == "yolo" and submitted.min_f1 is not None:
+            raise ApiError(422, "目标检测使用 mAP 与类别指标评审,不套用分割 F1 目标")
         if configuration.max_train_batches is not None or configuration.max_eval_batches is not None:
             raise ApiError(422, "完整实验不允许限批冒烟配置")
         if configuration.model is not None: raise ApiError(422, "完整实验从头训练,模型路径由服务端管理")
         selected = datasets.describe(configuration.data)
+        if (configuration.backend == "yolo") != (selected.get("task") == "detect"):
+            raise ApiError(422, "模型任务与数据标注不匹配,请刷新训练配置")
         if not selected["available"] or selected["status"] != "ready": raise ApiError(422, "数据集尚未就绪或存在阻断问题")
         report = datasets.validate(configuration.data)
         if report["overall_severity"] == "ERROR": raise ApiError(422, "数据质检 ERROR,请修复后训练")
@@ -141,10 +166,14 @@ def jobs(request):
         elif submitted.model_id.startswith("trained:"):
             trained = store(request).read(submitted.model_id[8:])
             if trained["status"] != "completed" or trained.get("kind") != "training": raise ApiError(422, "训练任务未完成")
-            checkpoint = Path(trained["best_weight"]); bins = trained["config"]["hog_bins"]; data = trained["config"]["data"]
+            checkpoint = Path(trained["best_weight"]); bins = trained["config"].get("hog_bins", 36); data = trained["config"]["data"]
         else: raise ApiError(422, "未知模型")
         if not checkpoint.is_file(): raise ApiError(409, "所选模型权重尚未就绪")
-        configuration = load_mixercseg_config("mixercseg_infer", {"model": str(checkpoint), "hog_bins": bins,
+        if submitted.model_id.startswith("trained:") and trained["config"].get("backend") == "yolo":
+            configuration = DetectionConfig(model=str(checkpoint), data=data, threshold=configuration.threshold,
+                                            imgsz=trained["config"]["imgsz"])
+        else:
+            configuration = load_mixercseg_config("mixercseg_infer", {"model": str(checkpoint), "hog_bins": bins,
                          "data": data, "threshold": configuration.threshold, "device": "cuda",
                          "scan_backend": "reference"})
         document = {"kind": "inference", "name": submitted.name, "config": configuration.model_dump(), "source": str(source)}
@@ -186,7 +215,7 @@ def artifacts(request, job_id):
     for root, prefix in [(directory / "evaluation", "evaluation/"), (paths.ROOT_DIR / selected.get("run_dir", "runs/nonexistent"), "run/")]:
         if root.exists():
             for path in sorted(root.rglob("*")):
-                if path.is_file() and path.suffix.lower() in (".json", ".csv", ".png", ".jpg", ".md", ".pth"):
+                if path.is_file() and path.suffix.lower() in (".json", ".csv", ".png", ".jpg", ".md", ".pth", ".pt"):
                     relative = prefix + path.relative_to(root).as_posix()
                     entries.append({"path": relative, "name": path.name, "url": f"/api/jobs/{job_id}/files/{quote(relative, safe='/')}"})
     return entries

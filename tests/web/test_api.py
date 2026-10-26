@@ -15,7 +15,7 @@ def test_without_gpu_complete_training_never_starts(web, monkeypatch):
     client, store, _ = web
     def forbidden(*args, **kwargs): raise AssertionError("不应启动训练进程")
     monkeypatch.setattr(store, "create", forbidden)
-    monkeypatch.setattr("od_web.datasets.describe", lambda _: {"available": True, "status": "ready", "name": "test", "splits": {}, "fingerprint": "test"})
+    monkeypatch.setattr("od_web.datasets.describe", lambda _: {"available": True, "status": "ready", "task": "detect", "name": "test", "splits": {}, "fingerprint": "test"})
     monkeypatch.setattr("od_web.datasets.validate", lambda _: {"overall_severity": "PASS"})
     response = client.post("/api/jobs", json={"kind": "training"})
     assert response.status_code == 409

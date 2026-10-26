@@ -17,6 +17,9 @@ from .jobs import utc_now
 
 def run(job_dir: Path) -> int:
     request = json.loads((job_dir / "request.json").read_text(encoding="utf-8"))
+    if request["config"].get("backend") == "yolo":
+        from od_platform.training.detection_experiment import run as run_detection
+        return run_detection(job_dir)
     if request["kind"] == "training":
         from od_platform.training.experiment import run_experiment
         return run_experiment(job_dir)
