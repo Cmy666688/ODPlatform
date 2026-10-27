@@ -8,6 +8,11 @@ class DatasetUploadLimit:
     def __init__(self, get_response): self.get_response = get_response
 
     def __call__(self, request):
+        if request.method == "POST" and request.path == "/api/uploads/video":
+            from od_platform.common.video import MAX_VIDEO_BYTES
+            try: length = int(request.META.get("CONTENT_LENGTH") or 0)
+            except ValueError: length = 0
+            if length > MAX_VIDEO_BYTES + 1024**2: return JsonResponse({"detail": "视频不能超过 200 MB"}, status=413)
         if request.method == "POST" and request.path == "/api/datasets":
             try: length = int(request.META.get("CONTENT_LENGTH") or 0)
             except ValueError: length = 0

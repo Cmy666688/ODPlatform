@@ -36,7 +36,7 @@ def convert_coco(input_dir: Path, output_labels_dir: Path,
         per_image[a["image_id"]].append(a)
 
     seg = options.task == Task.SEGMENT
-    for img_id, im in img_info.items():
+    for index, (img_id, im) in enumerate(img_info.items(), 1):
         W, H = float(im["width"]), float(im["height"])
         lines: list[str] = []
         for a in per_image.get(img_id, []):
@@ -55,4 +55,5 @@ def convert_coco(input_dir: Path, output_labels_dir: Path,
         stem = Path(im["file_name"]).stem
         (output_labels_dir / f"{stem}.txt").write_text(
             "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        if options.on_progress: options.on_progress(index, len(img_info))
     return names

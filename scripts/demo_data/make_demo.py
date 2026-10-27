@@ -7,6 +7,7 @@
 幂等:重跑覆盖同名文件。
 """
 from od_platform.common.paths import RAW_DATA_DIR
+from PIL import Image
 
 ROOT = RAW_DATA_DIR / "demo"
 IMG = ROOT / "images"
@@ -23,7 +24,7 @@ OBJ = ('  <object><name>{n}</name><bndbox>'
        "</bndbox></object>\n")
 
 for i in range(51):
-    (IMG / f"c_{i:03d}.jpg").write_bytes(b"")          # 空图:全流程不读像素
+    Image.new("RGB", (640, 480), (i*3 % 256, 120, 180)).save(IMG / f"c_{i:03d}.jpg")
     objs = OBJ.format(n="head", a=40 + i % 100, b=60, c=160 + i % 100, d=200)
     (ANN / f"c_{i:03d}.xml").write_text(XML.format(objs=objs), encoding="utf-8")
 
@@ -37,6 +38,6 @@ for i in range(12):                                     # 稀有类:反光衣
     objs = (OBJ.format(n="head", a=40 + i, b=60, c=160 + i, d=200)
             + OBJ.format(n="反光衣", a=x, b=260, c=x + 100, d=420))
     (ANN / f"rare_{i:03d}.xml").write_text(XML.format(objs=objs), encoding="utf-8")
-    (IMG / f"rare_{i:03d}.jpg").write_bytes(b"")
+    Image.new("RGB", (640, 480), (180, i*13 % 256, 100)).save(IMG / f"rare_{i:03d}.jpg")
 
 print(f"演示数据就绪: {ROOT}  (63 图 / 75 标注, 其中 12 张含稀有类)")

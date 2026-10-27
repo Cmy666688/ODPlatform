@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import yaml
 
 from od_platform.common.constants import IMAGE_EXTENSIONS, Task
+from od_platform.common.progress import Progress
 from od_platform.data_validation.labels import parse_label_line
 
 logger = logging.getLogger(__name__)
@@ -99,13 +100,16 @@ def _normalize_names(names) -> List[str]:
     return []
 
 
-def _build_stats(snap: DatasetSnapshot) -> None:
+def _build_stats(snap: DatasetSnapshot, on_progress=None) -> None:
     """内容层:扫一遍期望标签路径,聚合 SplitStats。读取失败跳过(结构问题归 label_format)。"""
     nc = snap.nc
+    progress = Progress("扫描标签", on_progress); done = 0
+    total = sum(len(files) for files in snap.labels_per_split.values())
     for split, label_paths in snap.labels_per_split.items():
         n_annotated = n_inst = 0
         class_inst: Dict[int, int] = {}
         for lbl in label_paths:
+            done += 1; progress(done, total)
             if not lbl.exists():
                 continue
             try:
@@ -134,7 +138,7 @@ def _build_stats(snap: DatasetSnapshot) -> None:
             class_instances=class_inst)
 
 
-def build_snapshot(yaml_path: Path, task_type: Optional[str] = None) -> DatasetSnapshot:
+def build_snapshot(yaml_path: Path, task_type: Optional[str] = None, *, on_progress=None) -> DatasetSnapshot:
     yaml_path = Path(yaml_path)
     snap = DatasetSnapshot(yaml_path=yaml_path)
     data, err = _load_yaml(yaml_path)
@@ -174,5 +178,5 @@ def build_snapshot(yaml_path: Path, task_type: Optional[str] = None) -> DatasetS
         snap.labels_per_split[split] = tuple(_label_path_for_image(p) for p in images)
         snap.label_files_per_split[split] = _list_label_files(snap.data_root, split)
 
-    _build_stats(snap)
+    _build_stats(snap, on_progress)
     return snap

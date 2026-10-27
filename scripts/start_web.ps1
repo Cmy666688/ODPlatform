@@ -1,4 +1,4 @@
-param([int]$Port = 8000, [switch]$Workbench)
+param([int]$Port = 8000, [switch]$Workbench, [switch]$Demo)
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pythonPath = (Get-Command python).Source
@@ -37,4 +37,15 @@ if ($Workbench) {
             -RedirectStandardError (Join-Path $logRoot 'workbench.err.log') | Out-Null
     }
     Write-Output 'Workbench: http://127.0.0.1:8501'
+}
+
+if ($Demo) {
+    $env:ODP_API_URL = "http://127.0.0.1:$Port"
+    if (-not (Get-NetTCPConnection -LocalPort 7860 -State Listen -ErrorAction SilentlyContinue)) {
+        Start-Process -FilePath $pythonPath -ArgumentList @('-m', 'od_web.gradio_demo', '--port', '7860') `
+            -WorkingDirectory $projectRoot -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $logRoot 'gradio.out.log') `
+            -RedirectStandardError (Join-Path $logRoot 'gradio.err.log') | Out-Null
+    }
+    Write-Output 'Gradio: http://127.0.0.1:7860'
 }

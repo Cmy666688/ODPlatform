@@ -19,7 +19,8 @@ def convert_yolo(input_dir: Path, output_labels_dir: Path,
     output_labels_dir.mkdir(parents=True, exist_ok=True)
     seg = options.task == Task.SEGMENT
 
-    for tf in sorted(input_dir.glob("*.txt")):
+    files = sorted(input_dir.glob("*.txt"))
+    for index, tf in enumerate(files, 1):
         out_lines: list[str] = []
         for ln, raw in enumerate(tf.read_text(encoding="utf-8").splitlines(), 1):
             raw = raw.strip()
@@ -34,4 +35,5 @@ def convert_yolo(input_dir: Path, output_labels_dir: Path,
             out_lines.append(raw)
         (output_labels_dir / tf.name).write_text(
             "\n".join(out_lines) + ("\n" if out_lines else ""), encoding="utf-8")
+        if options.on_progress: options.on_progress(index, len(files))
     return list(options.classes)

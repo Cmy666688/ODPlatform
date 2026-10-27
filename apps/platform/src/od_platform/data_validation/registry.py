@@ -43,6 +43,7 @@ class CheckContext:
     """一次质检运行共享的上下文。"""
     yaml_path: Path
     snapshot: DatasetSnapshot
+    on_progress: Any = None
 
 
 CheckFunc = Callable[[CheckContext], CheckResult]

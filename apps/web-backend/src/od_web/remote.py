@@ -335,6 +335,11 @@ def bridge(directory: Path):
                     final["remote_best_weight"] = final.get("best_weight"); final["best_weight"] = str(archive)
                 final["artifacts_synced_at"] = utc_now()
                 write_json(directory / "status.json", final)
+                if final["status"] == "completed" and final.get("media_type") == "video":
+                    from .explanation import start
+                    from .jobs import JobStore
+                    try: start(JobStore(directory.parent), directory.name)
+                    except (ValueError, RuntimeError): pass  # 推理成功独立于可重试的语言解释
                 break
             write_json(directory / "status.json", state)
         except (ValueError, RemoteRejected) as error:

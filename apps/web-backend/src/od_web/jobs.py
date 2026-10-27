@@ -71,6 +71,7 @@ class JobStore:
                      "created_at": request["created_at"], "config": request["config"], "progress": 0.0,
                      "execution": "remote", "remote_managed": True, "connection_status": "connecting",
                      "history": [], "name": request.get("name", "CrackMap 完整实验")}
+            state["media_type"] = request.get("media_type", "image")
             write_json(directory / "status.json", state)
             from .remote import start_bridge
             try: start_bridge(directory)
@@ -100,6 +101,6 @@ class JobStore:
         candidate = (root / relative).resolve()
         if not candidate.is_relative_to(root.resolve()) or not candidate.is_file():
             raise FileNotFoundError("产物不存在")
-        if candidate.suffix.lower() not in (".json", ".csv", ".md", ".png", ".jpg", ".pth", ".pt", ".log"):
+        if candidate.suffix.lower() not in (".json", ".jsonl", ".mp4", ".csv", ".md", ".png", ".jpg", ".pth", ".pt", ".log"):
             raise ValueError("不支持的产物格式")
         return candidate

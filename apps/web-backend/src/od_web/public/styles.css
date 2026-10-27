@@ -1422,3 +1422,39 @@ pre.log {
 .assistant-chat .dialog-actions { align-items:center; gap:12px; flex-wrap:wrap }
 .assistant-chat .dialog-actions .caption { flex:1; min-width:160px }
 @media (max-width:1050px) { .assistant-grid { grid-template-columns:1fr } }
+
+
+.sidebar nav { overflow-y:auto; min-height:0 }
+.project-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start }
+.project-grid > .card { min-width:0 }
+.project-grid h2 { margin-bottom:20px }
+.feature-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px }
+.feature-grid h3 { font-size:16px; margin:0 0 12px }
+.feature-grid p,.workflow-list { font-size:14px; line-height:1.9; color:#81919f }
+.workflow-list { padding-left:24px }
+.workflow-list li { padding:6px 0 }
+.table-scroll { overflow:auto; max-height:520px }
+.data-table { width:100%; border-collapse:collapse; font-size:13px; text-align:left }
+.data-table th,.data-table td { padding:12px 14px; border-bottom:1px solid #edf1f4; vertical-align:middle }
+.data-table th { color:#81919f; background:#f7f9fa; position:sticky; top:0 }
+.distribution-bar { height:5px; background:#edf3f1; min-width:70px; margin-bottom:7px }
+.distribution-bar i { height:100%; display:block; background:#198c70; min-width:0 }
+.distribution-bar i.val { background:#dfad57 }
+.distribution-bar i.test { background:#7595b7 }
+.analysis-value { font-size:clamp(16px,2vw,25px)!important; overflow-wrap:anywhere }
+.fingerprint { overflow-wrap:anywhere }
+.check-label { display:flex; gap:10px; align-items:center; font-size:14px; margin:20px 0 }
+.check-label input { width:auto }
+#video-player { width:100%; max-height:520px; background:#17232c; border-radius:12px; margin:16px 0 }
+#page-video .page-heading,#page-understanding .page-heading,#page-project .page-heading,#page-maintenance .page-heading { flex-wrap:wrap; gap:16px }
+#page-understanding .page-heading select { max-width:100% }
+.detail-actions { flex-wrap:wrap }
+.project-grid .body-copy { overflow-wrap:anywhere }
+@media (max-width:1050px) { .project-grid { grid-template-columns:1fr } }
+@media (max-width:580px) {
+  .feature-grid { grid-template-columns:1fr }
+  .data-table th,.data-table td { padding:10px 8px }
+  #page-video .card-heading { flex-direction:column; align-items:stretch }
+  #page-video .card-heading > select { max-width:100%; width:100% }
+  #page-video .data-table { min-width:310px }
+}

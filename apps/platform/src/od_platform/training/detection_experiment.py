@@ -196,6 +196,10 @@ def run(job_dir: Path) -> int:
 
 
 def infer(config, source, job_dir, state, update, cancelled) -> int:
+    from od_platform.common.video import VIDEO_SUFFIXES
+    if Path(source).suffix.lower() in VIDEO_SUFFIXES:
+        from od_platform.training.video_detection import infer_video
+        return infer_video(config, source, update, cancelled)
     from ultralytics import YOLO
     if cancelled(): raise InterruptedError("已请求停止推理")
     with RunContext("detection_infer") as context:

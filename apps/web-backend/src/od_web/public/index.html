@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=deepseek-2">
+  <link rel="stylesheet" href="/assets/styles.css?v=workspace-4">
   <script src="/assets/vendor/vue.global.prod.js" defer></script>
-  <script src="/assets/app.js?v=deepseek-1" defer></script>
-  <script src="/assets/assistant.js?v=deepseek-2" defer></script>
+  <script src="/assets/app.js?v=workspace-4" defer></script>
+  <script src="/assets/assistant.js?v=workspace-4" defer></script>
+  <script src="/assets/workspace.js?v=workspace-4" defer></script>
   <script src="/assets/datasets.js?v=detect-upload-2" defer></script>
 </head>
 <body>
@@ -16,12 +17,16 @@
     <a class="brand" href="#overview"><span class="brand-mark">OD</span><span>ODPlatform<small>视觉算法工作台</small></span></a>
     <div class="workspace-label">工作空间</div>
     <nav aria-label="主导航">
+      <a href="#project" data-page="project" class="nav-link"><span class="nav-icon">⌂</span>项目介绍</a>
       <a href="#overview" data-page="overview" class="nav-link active"><span class="nav-icon">◫</span>监控概览</a>
       <a href="#datasets" data-page="datasets" class="nav-link"><span class="nav-icon">▱</span>数据集管理</a>
+      <a href="#understanding" data-page="understanding" class="nav-link"><span class="nav-icon">▥</span>数据理解</a>
       <a href="#data" data-page="data" class="nav-link"><span class="nav-icon">▤</span>数据质检<span id="data-dot" class="nav-dot"></span></a>
       <a href="#experiments" data-page="experiments" class="nav-link"><span class="nav-icon">⌁</span>实验记录</a>
       <a href="#results" data-page="results" class="nav-link"><span class="nav-icon">▧</span>结果可视化</a>
       <a href="#assistant" data-page="assistant" class="nav-link"><span class="nav-icon">◇</span>智能助手</a>
+      <a href="#video" data-page="video" class="nav-link"><span class="nav-icon">▷</span>视频分析</a>
+      <a href="#maintenance" data-page="maintenance" class="nav-link"><span class="nav-icon">⚙</span>运行维护</a>
     </nav>
     <div class="sidebar-note"><span class="tiny-label">当前项目</span><strong>水面目标检测</strong><span>Django + Vue / YOLOv8 · WSODD</span></div>
     <footer class="sidebar-footer"><span class="connection-dot" id="connection-dot"></span><span id="connection-text">正在连接服务</span><small>本地工作区</small></footer>
@@ -108,6 +113,27 @@
           <article class="card assistant-settings"><span class="eyebrow">DEEPSEEK</span><h2>服务状态</h2><p class="body-copy">服务凭据由后端管理，本页面仅显示是否已配置，不展示密钥或配置代码。</p><button id="assistant-check" class="button secondary" type="button">重新检查状态</button><div class="assistant-context-note"><h3>发送哪些信息</h3><p class="body-copy">你的问题、当前会话、所选数据集的类别与划分、质检摘要和关联实验指标会发给 DeepSeek。原图、视频、权重、SSH 信息与训练日志保留在本地或远程 GPU。</p><p class="caption">回答用于辅助理解。模型准确率以独立测试报告为准，推理图片本身不提供精度验收结论。</p></div>
           </article>
         </div>
+      </section>
+      <section id="page-project" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">HARBOR VISION</div><h1>港区水域通航目标检测</h1><p>从数据接入、训练监控到检测解释，保留可复核的实验依据。</p></div><a href="#overview" class="button primary">进入工作台 →</a></div>
+        <div class="project-grid"><article class="card"><h2>面向水面场景的多类别检测</h2><p class="body-copy">接入船舶、浮标、人员等港区水域图像，通过 YOLO 检测框理解画面中的目标。支持 WSODD 和用户上传的 VOC / YOLO 数据，类别以数据集标注为准。</p><p class="body-copy">结果用于实验分析与辅助观察。检测结果不能直接替代导航决策、航速测量或碰撞风险判断。</p></article><article class="card"><span class="eyebrow">WORKFLOW</span><ol class="workflow-list"><li>上传压缩包或文件夹，完成图像和框标注质检</li><li>冻结类别、划分和数据指纹，在远程 GPU 训练</li><li>独立测试与可视化，按类别核对效果</li><li>图片 / 视频检测后，由 DeepSeek 解读结构化摘要</li></ol></article></div>
+        <article class="card" style="margin-top:24px"><div class="card-heading"><h2>项目中的工程改进</h2><span class="badge neutral">实现方式</span></div><div class="feature-grid"><div><h3>Django + Vue 工作台</h3><p>统一上传、台账、任务和可视化；算法演示也可使用 Streamlit 与 Gradio。</p></div><div><h3>数据与实验可追溯</h3><p>保存原始上传、SHA256 数据身份和质检历史，区分新增与已修复问题。</p></div><div><h3>远程 GPU 执行</h3><p>训练与推理独立运行，支持传输续接和结果归档；界面保留真实连接状态。</p></div><div><h3>有依据的智能解释</h3><p>大模型解读检测摘要，原始视频与模型权重保留在本机或远程 GPU。</p></div></div><p class="caption">以上为平台工程改进；当前使用 YOLOv8 基线，不宣称提出新的检测算法。完成训练与精度达标分别评审。</p></article>
+        <article class="card" style="margin-top:24px"><div class="card-heading"><h2>算法演示入口</h2></div><div class="detail-actions"><a href="http://127.0.0.1:8501" class="button secondary" target="_blank" rel="noopener">Streamlit 算法工作台 ↗</a><a href="http://127.0.0.1:7860" class="button secondary" target="_blank" rel="noopener">Gradio D7 演示 ↗</a></div><p class="caption">均为本机服务，复用同一个 Django API；不可用时按项目启动脚本启用。</p></article>
+      </section>
+      <section id="page-understanding" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">DATA UNDERSTANDING</div><h1>数据理解</h1><p>查看类别、采集分组和划分分布，为训练与验收提供依据。</p></div><select id="analysis-dataset" aria-label="分析数据集"></select></div>
+        <div id="analysis-summary" class="metrics-grid"></div><article class="card"><div class="card-heading"><div><h2>类别分布</h2><p>计数来自最近一次质检；新增数据或标注修改后请重新质检。</p></div></div><div id="class-distribution"></div></article>
+        <div class="project-grid" style="margin-top:24px"><article class="card"><h2>采集分组</h2><p class="body-copy">同组不能跨集合。根据文件名推断的相机或日期分组仍需结合采集记录核对，不等同于场景已完全独立。</p><div id="analysis-groups"></div></article><article class="card"><h2>数据来源与限制</h2><div id="analysis-provenance"></div><h3>如何理解缺类</h3><p class="body-copy">训练集缺类会阻断开训；验证或测试集缺类会保留风险提示，对应类别不能给出独立验收结论。总体平均指标不能替代逐类评审。</p><a href="#data" class="text-link">查看质量报告 →</a></article></div>
+      </section>
+      <section id="page-maintenance" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">RUN RETENTION</div><h1>运行维护</h1><p>预览历史运行的保留策略，保护已登记实验与其模型权重。</p></div><button id="retention-preview" class="button secondary">刷新预览</button></div>
+        <div class="project-grid"><article class="card"><h2>自动保留策略</h2><form id="retention-form"><label class="check-label"><input name="enabled" type="checkbox"> 启用自动清理（每天检查）</label><div class="form-grid"><label>保留天数<input name="keep_days" type="number" min="1" max="3650" required></label><label>每类保留最近运行数<input name="keep_latest" type="number" min="1" max="1000" required></label><label>运行目录容量目标 GB<input name="max_gb" type="number" min="1" max="10000" required></label><label>回收区保留天数<input name="trash_days" type="number" min="7" max="365" required></label></div><p class="body-copy">已登记任务引用的运行目录、权重以及缺少完成审计的目录均受保护。候选目录先移入回收区，可恢复；超过回收区保留天数后才永久清理。回收阶段不会立即释放磁盘空间。</p><div class="detail-actions"><button class="button primary" type="submit">保存策略</button><button id="retention-apply" class="button secondary" type="button">执行已保存策略</button></div></form><p id="retention-feedback" role="status" class="caption"></p></article><article class="card"><h2>执行前预览</h2><div id="retention-plan"></div></article></div>
+        <article class="card" style="margin-top:24px"><div class="card-heading"><h2>可恢复的运行</h2></div><div id="retention-trash"></div></article>
+      </section>
+      <section id="page-video" class="page" hidden>
+        <div class="page-heading"><div><div class="eyebrow">VIDEO ANALYSIS</div><h1>视频目标检测</h1><p>远程 GPU 逐帧检测，再由 DeepSeek 解释类别与出现频率。</p></div><span class="badge neutral">原视频不发送给大模型</span></div>
+        <div class="project-grid"><article class="card"><h2>添加视频</h2><label class="upload-zone" for="video-upload"><span class="upload-icon">▷</span><strong>选择港区水域视频</strong><small>MP4 / AVI / MOV / MKV · 最大 200 MB</small><input id="video-upload" type="file" accept=".mp4,.avi,.mov,.mkv" hidden></label><div class="progress-track" id="video-upload-track" hidden><i id="video-upload-bar"></i></div><p id="video-upload-note" class="caption" role="status">最长 120 秒，最高 60 FPS、7200 帧、1920×1080 像素总量。</p><label class="form-label">检测模型<select id="video-model"><option value="">等待该数据集模型归档完成</option></select></label><label class="form-label">置信度阈值<input id="video-threshold" type="number" min="0.05" max="0.95" step="0.05" value="0.25"></label><button id="video-submit" class="button primary" type="button" disabled>远程 GPU 检测</button><p id="video-feedback" class="caption" role="status"></p></article><article class="card"><h2>结果含义</h2><p class="body-copy">输出标注视频、逐帧 JSONL、抽样检测框和类别摘要。帧出现次数和同帧最多目标数不等于视频中的独立目标数量。</p><p class="body-copy">DeepSeek 仅接收类别与频率等结构化摘要。没有真值标注的视频不计算准确率，不从检测结果推断航速、轨迹或碰撞风险。</p><p class="caption">模型推理必须连接远程 GPU。语言解释在本机请求 DeepSeek，可单独重试；解释失败不改变已经完成的视频检测结果。</p></article></div>
+        <article class="card" style="margin-top:24px"><div class="card-heading"><h2>视频任务</h2><select id="video-job" aria-label="视频任务"><option value="">尚无视频任务</option></select></div><p id="video-job-status" class="body-copy"></p><video id="video-player" controls playsinline preload="metadata" hidden></video><div id="video-summary"></div><div id="video-downloads" class="download-links"></div><div class="card-heading" style="margin-top:24px"><h2>DeepSeek 视频解释</h2><button id="video-explain" class="button secondary" disabled>生成 / 重试解释</button></div><p id="video-explanation" class="body-copy" style="white-space:pre-wrap">检测完成后自动生成解释。</p></article>
       </section>
     </main>
     <footer class="page-footer"><span>ODPlatform</span><span>YOLOv8 / WSODD 水面目标检测工作台</span></footer>

@@ -73,6 +73,31 @@ def assistant_chat(request):
     except assistant.ProviderError as error: raise ApiError(503, str(error)) from None
 
 
+@endpoint(["GET", "POST"])
+def explain_video(request, job_id):
+    from . import explanation
+    return explanation.start(store(request), job_id) if request.method == "POST" else explanation.read(store(request), job_id)
+
+
+@endpoint(["GET", "POST"])
+def retention_policy(request):
+    from od_platform.common import retention
+    if request.method == "POST": retention.configure(json.loads(request.body))
+    return {**retention.preview(), "trash": retention.trash()}
+
+
+@endpoint(["POST"])
+def retention_apply(request):
+    from od_platform.common.retention import sweep
+    return sweep(force=True)
+
+
+@endpoint(["POST"])
+def retention_restore(request, identifier):
+    from od_platform.common.retention import restore
+    return restore(identifier)
+
+
 @endpoint(["GET"])
 def config(request):
     identifier = request.GET.get("dataset", "wsodd")
@@ -117,6 +142,26 @@ def quality_history(request, identifier):
     datasets.dataset_yaml(identifier)
     return [{key: value.get(key) for key in ("report_id", "checked_at", "overall_severity", "comparison", "data_fingerprint")}
             for value in listing(identifier)]
+
+
+@endpoint(["GET"])
+def dataset_statistics(request, identifier):
+    from collections import Counter, defaultdict
+    import yaml
+    selected = datasets.describe(identifier)
+    if selected["task"] != "detect" or not selected["available"]: raise ApiError(409, "目标检测数据集尚未就绪")
+    document = yaml.safe_load(datasets.dataset_yaml(identifier).read_text(encoding="utf-8"))
+    manifest_file = (paths.ROOT_DIR / document["manifest_path"]).resolve()
+    if not manifest_file.is_relative_to(paths.PROCESSED_DATA_DIR.resolve()): raise ApiError(422, "数据契约路径异常")
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8")); groups = defaultdict(Counter); sizes = Counter()
+    for row in manifest["samples"]:
+        groups[row.get("group", "未记录")][row["split"]] += 1
+        sizes[f"{row['width']} × {row['height']}"] += 1
+    quality = selected.get("quality") or {}
+    return {"dataset": selected["name"], "id": identifier, "splits": selected["splits"], "names": manifest["names"],
+            "class_counts": quality.get("class_counts", {}), "groups": dict(groups), "resolutions": dict(sizes),
+            "source_format": manifest.get("source_format", "VOC"), "split_policy": manifest.get("split_policy", "未记录"),
+            "fingerprint": selected["fingerprint"], "quality": quality.get("overall_severity"), "sample_count": len(manifest["samples"])}
 
 
 @endpoint(["GET"])
@@ -185,8 +230,12 @@ def jobs(request):
         document["dataset_counts"] = selected["splits"]
         document["dataset_fingerprint"] = selected["fingerprint"]
     else:
-        if submitted.upload_id is None or len(submitted.upload_id) != 36 or not submitted.upload_id.endswith(".png"):
-            raise ApiError(422, "请先上传图片")
+        import re
+        from od_platform.common.video import VIDEO_SUFFIXES
+        suffix = Path(submitted.upload_id or "").suffix
+        allowed = VIDEO_SUFFIXES if submitted.media_type == "video" else (".png",)
+        if not re.fullmatch(r"[0-9a-f]{32}\.[a-z0-9]{3}", submitted.upload_id or "") or suffix not in allowed:
+            raise ApiError(422, "请先上传对应类型的图片或视频")
         upload_root = paths.RUNS_DIR / "web_uploads"; source = (upload_root / submitted.upload_id).resolve()
         if not source.is_relative_to(upload_root.resolve()) or not source.is_file(): raise ApiError(404, "上传图片不存在")
         data = "crackmap"
@@ -202,10 +251,14 @@ def jobs(request):
             configuration = DetectionConfig(model=str(checkpoint), data=data, threshold=configuration.threshold,
                                             imgsz=trained["config"]["imgsz"])
         else:
+            if submitted.media_type == "video": raise ApiError(422, "视频仅支持已训练的目标检测模型")
             configuration = load_mixercseg_config("mixercseg_infer", {"model": str(checkpoint), "hog_bins": bins,
                          "data": data, "threshold": configuration.threshold, "device": "cuda",
                          "scan_backend": "reference"})
-        document = {"kind": "inference", "name": submitted.name, "config": configuration.model_dump(), "source": str(source)}
+        if submitted.media_type == "video":
+            from od_platform.common.video import inspect_video
+            inspect_video(source)
+        document = {"kind": "inference", "name": submitted.name, "config": configuration.model_dump(), "source": str(source), "media_type": submitted.media_type}
     hardware = app._hardware()
     if not hardware["cuda_available"]:
         raise ApiError(409, hardware.get("message", "远程 GPU 尚未就绪,任务未启动"))
@@ -238,13 +291,33 @@ def upload(request):
     return {"id": upload_id, "width": decoded.shape[1], "height": decoded.shape[0]}
 
 
+@endpoint(["POST"])
+def video_upload(request):
+    from od_platform.common.video import MAX_VIDEO_BYTES, VIDEO_SUFFIXES, inspect_video
+    file = request.FILES.get("file")
+    if file is None: raise ApiError(422, "请选择视频")
+    suffix = Path(file.name).suffix.lower()
+    if suffix not in VIDEO_SUFFIXES or file.size > MAX_VIDEO_BYTES: raise ApiError(413, "请选择最大 200 MB 的 MP4、AVI、MOV 或 MKV 视频")
+    identifier = uuid4().hex + suffix; target = paths.RUNS_DIR / "web_uploads" / identifier; target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        size = 0
+        with target.open("xb") as stream:
+            for chunk in file.chunks():
+                size += len(chunk)
+                if size > MAX_VIDEO_BYTES: raise ValueError("视频超过 200 MB")
+                stream.write(chunk)
+        return {"id": identifier, **inspect_video(target)}
+    except Exception:
+        target.unlink(missing_ok=True); raise
+
+
 @endpoint(["GET"])
 def artifacts(request, job_id):
     selected = store(request).read(job_id); entries = []; directory = store(request).directory(job_id)
     for root, prefix in [(directory / "evaluation", "evaluation/"), (paths.ROOT_DIR / selected.get("run_dir", "runs/nonexistent"), "run/")]:
         if root.exists():
             for path in sorted(root.rglob("*")):
-                if path.is_file() and path.suffix.lower() in (".json", ".csv", ".png", ".jpg", ".md", ".pth", ".pt"):
+                if path.is_file() and path.suffix.lower() in (".json", ".jsonl", ".mp4", ".csv", ".png", ".jpg", ".md", ".pth", ".pt"):
                     relative = prefix + path.relative_to(root).as_posix()
                     entries.append({"path": relative, "name": path.name, "url": f"/api/jobs/{job_id}/files/{quote(relative, safe='/')}"})
     return entries
@@ -253,6 +326,24 @@ def artifacts(request, job_id):
 @endpoint(["GET"])
 def artifact(request, job_id, relative):
     path = store(request).artifact(job_id, relative)
+    if path.suffix == ".mp4" and request.META.get("HTTP_RANGE"):
+        import re
+        from django.http import StreamingHttpResponse
+        size = path.stat().st_size
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", request.META["HTTP_RANGE"])
+        if not match or not any(match.groups()): return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
+        first, last = match.groups()
+        start = int(first) if first else max(0, size-int(last)); end = min(size-1, int(last)) if first and last else size-1
+        if start > end or start >= size: return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
+        def chunks():
+            with path.open("rb") as stream:
+                stream.seek(start); remaining = end-start+1
+                while remaining:
+                    data = stream.read(min(remaining, 1024**2))
+                    if not data: break
+                    remaining -= len(data); yield data
+        return StreamingHttpResponse(chunks(), status=206, content_type="video/mp4", headers={"Accept-Ranges": "bytes",
+            "Content-Range": f"bytes {start}-{end}/{size}", "Content-Length": str(end-start+1)})
     return FileResponse(path.open("rb"), as_attachment=request.GET.get("download") == "true", filename=path.name)
 
 

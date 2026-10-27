@@ -25,6 +25,7 @@ class JobRequest(BaseModel):
     min_f1: Optional[float] = Field(default=None, ge=0, le=1)
     upload_id: Optional[str] = None
     model_id: str = "official"
+    media_type: Literal["image", "video"] = "image"
 
     @model_validator(mode="before")
     @classmethod
@@ -114,6 +115,8 @@ def main() -> None:
     from django.core.asgi import get_asgi_application
     call_command("migrate", interactive=False, verbosity=0)
     call_command("collectstatic", interactive=False, verbosity=0)
+    from od_platform.common.retention import start_scheduler
+    start_scheduler()
     uvicorn.run(get_asgi_application(), host="127.0.0.1", port=arguments.port, lifespan="off")
 
 

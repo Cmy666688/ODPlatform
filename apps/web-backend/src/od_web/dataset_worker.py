@@ -15,7 +15,10 @@ def run(identifier: str, source: Path, mode: str) -> None:
         if mode == "archive":
             Dataset.objects.filter(pk=identifier).update(phase="检查并解压", progress=0.1)
             destination = source.parent.parent / "extracted"
-            extract_archive(source, destination, max_expanded=MAX_EXPANDED, max_files=MAX_FILES); source = destination
+            def extracted(done, total):
+                if done % 10 == 0 or done == total:
+                    Dataset.objects.filter(pk=identifier).update(phase=f"解压文件 {done} / {total or '统计中'}", progress=0.1 + 0.1 * done / total if total else 0.1)
+            extract_archive(source, destination, max_expanded=MAX_EXPANDED, max_files=MAX_FILES, on_progress=extracted); source = destination
         Dataset.objects.filter(pk=identifier).update(phase="转换图像与标注", progress=0.2)
         def progress(done, total):
             if done == total or done % 10 == 0:

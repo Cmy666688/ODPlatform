@@ -87,16 +87,19 @@ def _copy_pair(img: Path, lbl: Path, out: SplitOutputDirs, split: str) -> None:
 
 
 def materialize(manifest: SplitManifest, source: SplitSourceDirs,
-                out: SplitOutputDirs) -> dict[str, int]:
+                out: SplitOutputDirs, *, on_progress=None) -> dict[str, int]:
     """按 manifest 物化。返回各 split 的样本数。"""
     for leaf in out.leaves:
         _assert_within(paths.PROCESSED_DATA_DIR, leaf)
         _safe_clear(leaf)
     counts: dict[str, int] = {}
+    done = 0; total = len(manifest.samples)
     for split in _SPLITS:
         stems = manifest.stems_of(split)
         for stem in stems:
             img, lbl = source.resolve(stem)
             _copy_pair(img, lbl, out, split)
+            done += 1
+            if on_progress: on_progress(done, total)
         counts[split] = len(stems)
     return counts

@@ -35,12 +35,12 @@ def safe_relative(name: str) -> Path:
     return Path(*value.parts)
 
 
-def extract_archive(archive: Path, destination: Path, *, max_expanded=None, max_files=None) -> None:
+def extract_archive(archive: Path, destination: Path, *, max_expanded=None, max_files=None, on_progress=None) -> None:
     """不跟随链接,同时核对声明大小和实际读取大小。"""
     expanded_limit = MAX_EXPANDED if max_expanded is None else max_expanded
     file_limit = MAX_FILES if max_files is None else max_files
     destination.mkdir(parents=True, exist_ok=False)
-    seen = set(); expanded = 0; count = 0
+    seen = set(); expanded = 0; count = 0; total = 0
     def materialize(name, size, stream):
         nonlocal expanded, count
         relative = safe_relative(name)
@@ -60,8 +60,10 @@ def extract_archive(archive: Path, destination: Path, *, max_expanded=None, max_
                 output.write(chunk)
         if actual != size:
             raise ValueError("压缩包成员大小不完整")
+        if on_progress: on_progress(count, total)
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as source:
+            total = sum(not member.is_dir() for member in source.infolist())
             if len(source.infolist()) > file_limit * 2: raise ValueError("压缩包文件项过多")
             for member in source.infolist():
                 safe_relative(member.filename.rstrip("/"))
@@ -85,6 +87,7 @@ def extract_archive(archive: Path, destination: Path, *, max_expanded=None, max_
                     materialize(tar_member.name, tar_member.size, tar_stream)
     else:
         raise ValueError("请上传 ZIP、TAR、TAR.GZ 或 TGZ 压缩包")
+    if on_progress: on_progress(count, count)
 
 
 def _pairs(image_dir: Path, mask_dir: Path) -> list:

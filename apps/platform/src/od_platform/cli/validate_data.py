@@ -22,7 +22,7 @@ logger = get_logger(base_path=paths.LOGGING_DIR, log_type="validate")
 
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(prog="odp-validate",
-                                description="数据集质检(只读):15 项 check,按最严聚合成退出码")
+                                description="数据集质检(不改原数据):按数据契约选择检查项,输出进度与报告")
     p.add_argument("yaml_path", help="数据集 yaml(如 configs/datasets/demo.yaml)")
     p.add_argument("--task", default=None, choices=Task.all(),
                    help="不传则取 yaml 里 odp_meta.task")

@@ -52,7 +52,7 @@ mypy_path = ["apps/platform/src", "apps/web-backend/src"]
 exclude = ["backends/mixercseg/_vendor/"]
 
 [[tool.mypy.overrides]]
-module = ["colorlog.*", "psutil.*", "ultralytics.*", "torch.*", "paramiko.*"]
+module = ["colorlog.*", "psutil.*", "ultralytics.*", "torch.*", "paramiko.*", "gradio.*", "imageio_ffmpeg.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import re
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 from od_platform.common import paths
+from od_platform.common.json_io import write_json
 
 _SAFE = re.compile(r"^[a-z0-9_]+$")
 
@@ -42,7 +44,9 @@ class RunContext:
             self.run_id = f"{base.name}-{suffix}"
             self.run_dir = base.with_name(self.run_id)
         self.run_dir.mkdir(parents=True, exist_ok=False)
+        write_json(self.run_dir / ".active.json", {"pid": os.getpid(), "created_at": self.created_at})
         return self
 
     def __exit__(self, *exc) -> Literal[False]:
+        (self.run_dir / ".active.json").unlink(missing_ok=True)
         return False                                   # 不吞异常

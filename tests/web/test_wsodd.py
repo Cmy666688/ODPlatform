@@ -63,6 +63,17 @@ def test_detection_pairs_groups_fingerprint_and_preview(web):
     previews = client.get("/api/datasets/wsodd/previews").json()
     assert previews and client.get(previews[0]["mask"]).status_code == 200
     assert client.get(previews[0]["image"]).headers["Content-Type"] == "image/jpeg"
+    statistics = client.get("/api/datasets/wsodd/statistics").json()
+    assert statistics["sample_count"] == 12 and len(statistics["names"]) == 14
+    assert sum(sum(group.values()) for group in statistics["groups"].values()) == 12
+
+
+def test_cli_uses_same_detection_contract_and_progress(web):
+    from od_platform.data_validation.service import validate_dataset
+    prepare(web); events = []
+    report = validate_dataset(paths.dataset_yaml_path("wsodd"), write_report=False, on_progress=lambda *event: events.append(event))
+    assert report.overall_severity == "WARNING" and report.snapshot.data_fingerprint
+    assert events[-1][1:] == (12,12)
 
 
 def test_quality_history_retains_reports_and_detects_label_change(web):

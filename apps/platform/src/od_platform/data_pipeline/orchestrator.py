@@ -27,6 +27,7 @@ from od_platform.common.lineage import (
     SplitManifest, TOOL_VERSION, compute_data_fingerprint,
 )
 from od_platform.common.run_context import RunContext
+from od_platform.common.progress import Progress
 from od_platform.data_pipeline.convert.registry import ConvertOptions
 from od_platform.data_pipeline.convert.service import convert_data_to_yolo
 from od_platform.data_pipeline.report import (
@@ -62,8 +63,10 @@ class DatasetPipeline:
         random_state: int = DEFAULT_RANDOM_STATE,
         split_strategy: str = DEFAULT_SPLIT_STRATEGY,
         run: RunContext | None = None,
+        on_progress=None,
     ):
         self.dataset = dataset
+        self.on_progress = on_progress
         self.annotation_format = annotation_format
         self.task = task
         self.train_rate = train_rate
@@ -119,19 +122,22 @@ class DatasetPipeline:
     # ---- 扫描:转换产物 → 内存结构 ----
 
     def _scan(self, staging: Path, classes: list[str]):
+        progress = Progress("扫描标注", self.on_progress)
         image_index: dict[str, Path] = {}
         for p in sorted(self.raw_images.rglob("*")):
             if p.suffix.lower() in IMAGE_EXTENSIONS:
                 image_index[p.stem] = p
         labels_per_image: dict[str, list[str]] = defaultdict(list)
         label_bytes: dict[str, bytes] = {}
-        for txt in sorted(staging.glob("*.txt")):
+        files = sorted(staging.glob("*.txt"))
+        for index, txt in enumerate(files, 1):
             label_bytes[txt.stem] = txt.read_bytes()
             for line in txt.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if line:
                     idx = int(line.split()[0])
                     labels_per_image[txt.stem].append(classes[idx])
+            progress(index, len(files))
         return image_index, labels_per_image, label_bytes
 
     # ---- 主流程 ----
@@ -143,13 +149,15 @@ class DatasetPipeline:
             return self._execute(run)
 
     def _execute(self, run: RunContext) -> dict[str, object]:
+        Progress("检查原料", self.on_progress)(0, 0)
         self._check_raw()
         out = SplitOutputDirs.for_dataset(self.dataset)
 
         with tempfile.TemporaryDirectory(prefix="odp_pipe_") as staging_dir:
             staging = Path(staging_dir)
             ann_in = self._annotation_dir()
-            options = ConvertOptions(task=self.task, classes=self.classes)
+            progress = Progress("转换标注", self.on_progress); progress(0, 0)
+            options = ConvertOptions(task=self.task, classes=self.classes, on_progress=progress)
             classes = convert_data_to_yolo(ann_in, staging, self.annotation_format, options)
 
             image_index, labels_per_image, label_bytes = self._scan(staging, classes)
@@ -180,7 +188,7 @@ class DatasetPipeline:
             manifest_ref = manifest_path.relative_to(paths.ROOT_DIR).as_posix()
 
             source = SplitSourceDirs(images=self.raw_images, labels=staging)
-            counts = materialize(manifest, source, out)
+            counts = materialize(manifest, source, out, on_progress=Progress("物化样本", self.on_progress))
 
             yaml_path = paths.dataset_yaml_path(self.dataset)
             write_dataset_yaml(
@@ -189,6 +197,7 @@ class DatasetPipeline:
                 task=self.task, manifest_ref=manifest_ref)
 
         logger.info("数据集 %r 完成: %s", self.dataset, counts)
+        Progress("完成", self.on_progress)(1, 1)
 
         # ★ 盖 transform 章: 我(D3)划分了这批数据。
         #   data_fingerprint 从【我刚建好的 samples】算 —— 一手证据, 不抄任何人。

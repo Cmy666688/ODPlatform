@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from od_platform.common.constants import LINEAGE_MAX_DETAIL
+from od_platform.common.progress import Progress
 from od_platform.data_validation.checks._lineage import load_manifest_from_yaml
 from od_platform.data_validation.registry import (
     CheckContext, CheckResult, CheckSeverity, check,
@@ -38,7 +39,9 @@ def validate_manifest_lineage(ctx: CheckContext) -> CheckResult:
     changed: List[str] = []
     moved: List[dict] = []
     missing: List[str] = []
-    for s in manifest.samples:
+    progress = Progress("核验标签 SHA256", ctx.on_progress)
+    progress(0, len(manifest.samples))
+    for index, s in enumerate(manifest.samples, 1):
         label_path = disk.get((s.split, s.stem))
         if label_path is None:
             elsewhere = disk_splits_of_stem.get(s.stem)
@@ -48,6 +51,7 @@ def validate_manifest_lineage(ctx: CheckContext) -> CheckResult:
                 missing.append(s.stem)
         elif _sha256(label_path) != s.sha256:
             changed.append(s.stem)
+        progress(index, len(manifest.samples))
 
     details = {"n_samples": len(manifest.samples),
                "n_changed": len(changed), "n_moved": len(moved), "n_missing": len(missing),

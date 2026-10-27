@@ -54,10 +54,10 @@ function duration(seconds) {
 
 function route() {
   const name = location.hash.slice(1) || "overview";
-  const valid = ["overview", "datasets", "data", "experiments", "results", "assistant"].includes(name) ? name : "overview";
+  const valid = ["overview", "datasets", "data", "experiments", "results", "assistant", "project", "understanding", "video", "maintenance"].includes(name) ? name : "overview";
   $$(".page").forEach((page) => { page.hidden = page.id !== `page-${valid}`; });
   $$(".nav-link").forEach((link) => link.classList.toggle("active", link.dataset.page === valid));
-  $("#breadcrumb-title").textContent = { overview: "监控概览", datasets: "数据集管理", data: "数据质检", experiments: "实验记录", results: "结果可视化", assistant: "智能助手" }[valid];
+  $("#breadcrumb-title").textContent = { overview: "监控概览", datasets: "数据集管理", data: "数据质检", experiments: "实验记录", results: "结果可视化", assistant: "智能助手", project: "项目介绍", understanding: "数据理解", video: "视频分析", maintenance: "运行维护" }[valid];
   window.scrollTo(0, 0);
   if (valid === "results") loadGallery().catch((error) => toast(error.message, true));
   if (valid === "data") loadQualityHistory().catch((error) => toast(error.message, true));
@@ -94,7 +94,7 @@ function drawChart(history) {
 
 function jobTable(jobs, limit) {
   if (!jobs.length) return empty("还没有实验记录", "GPU 就绪后提交完整训练，或前往结果页体验图片推理。");
-  return `<div class="table-wrap"><table><thead><tr><th>实验名称</th><th>类型</th><th>状态</th><th>创建时间</th><th></th></tr></thead><tbody>${jobs.slice(0, limit).map((job) => `<tr><td>${esc(job.name)}</td><td>${job.kind === "training" ? "完整训练" : "图片推理"}</td><td>${statusBadge(job)}</td><td>${esc(new Date(job.created_at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))}</td><td><button data-detail="${job.id}">查看 →</button></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>实验名称</th><th>类型</th><th>状态</th><th>创建时间</th><th></th></tr></thead><tbody>${jobs.slice(0, limit).map((job) => `<tr><td>${esc(job.name)}</td><td>${job.kind === "training" ? "完整训练" : job.media_type === "video" ? "视频推理" : "图片推理"}</td><td>${statusBadge(job)}</td><td>${esc(new Date(job.created_at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))}</td><td><button data-detail="${job.id}">查看 →</button></td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function renderOverview() {

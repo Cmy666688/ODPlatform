@@ -12,6 +12,7 @@ import yaml
 
 from od_platform.common import paths, stamp
 from od_platform.common.lineage import compute_data_fingerprint
+from od_platform.common.progress import Progress
 from od_platform.data_validation import VALIDATOR_VERSION
 from od_platform.data_validation.checks._lineage import load_manifest_from_yaml
 from od_platform.data_validation.registry import (
@@ -31,12 +32,15 @@ def _safe_run_one(entry: CheckEntry, ctx: CheckContext) -> CheckResult:
 
 
 def run_all_checks(ctx: CheckContext) -> List[CheckResult]:
-    return [_safe_run_one(e, ctx) for e in get_all_checks()]
+    entries = get_all_checks(); results = []; progress = Progress("数据检查项", ctx.on_progress)
+    for index, entry in enumerate(entries, 1):
+        results.append(_safe_run_one(entry, ctx)); progress(index, len(entries))
+    return results
 
 
 def validate_dataset(yaml_path, task_type: Optional[str] = None,
                      run_id: Optional[str] = None,
-                     write_report: bool = True) -> ValidationReport:
+                     write_report: bool = True, on_progress=None) -> ValidationReport:
     """端到端:快照 → 全量 check → 报告(logger + json/csv)。"""
     t0 = time.perf_counter()
     run_id = run_id or datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -48,8 +52,17 @@ def validate_dataset(yaml_path, task_type: Optional[str] = None,
     if isinstance(document, dict) and document.get("format") == "semantic_masks":
         from od_platform.data_validation.semantic import validate_semantic_dataset
         return validate_semantic_dataset(yaml_path, run_id=run_id, write_report=write_report)
-    snapshot = build_snapshot(yaml_path, task_type=task_type)
-    results = run_all_checks(CheckContext(yaml_path=yaml_path, snapshot=snapshot))
+    if isinstance(document, dict) and document.get("format") == "yolo_detect":
+        from types import SimpleNamespace
+        from od_platform.data_pipeline.wsodd import validate
+        result = validate(yaml_path, write_report=write_report, on_progress=on_progress)
+        report = ValidationReport(run_id, SimpleNamespace(yaml_path=yaml_path, data_fingerprint=result["data_fingerprint"]),
+            [CheckResult(row["name"], row["severity"], row["summary"], row["details"]) for row in result["results"]], time.perf_counter()-t0)
+        report.render_to_logger()
+        if write_report: report.write_results_csv(paths.RUNS_DIR / "data_validation" / yaml_path.stem / "results.csv")
+        return report
+    snapshot = build_snapshot(yaml_path, task_type=task_type, on_progress=on_progress)
+    results = run_all_checks(CheckContext(yaml_path=yaml_path, snapshot=snapshot, on_progress=on_progress))
     report = ValidationReport(run_id=run_id, snapshot=snapshot, results=results,
                               duration_seconds=time.perf_counter() - t0)
     report.render_to_logger()
@@ -58,6 +71,8 @@ def validate_dataset(yaml_path, task_type: Optional[str] = None,
         out_dir.mkdir(parents=True, exist_ok=True)
         report.write_json(out_dir / "report.json")
         report.write_results_csv(out_dir / "results.csv")
+        from od_platform.data_validation.history import save_report
+        save_report(yaml_path.stem, report.to_dict())
 
     # ★ 盖 validate 章: 我(D4)验过这批数据。仅在【能定位到 manifest】时盖 ——
     #   没有 manifest 的数据集(非 odp-transform 产出)谈不上流转卡, 跳过。

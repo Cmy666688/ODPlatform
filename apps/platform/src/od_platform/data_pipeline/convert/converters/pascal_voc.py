@@ -20,15 +20,17 @@ def convert_pascal_voc(input_dir: Path, output_labels_dir: Path,
 
     # classes 三态:None=按数据自带;[...]=白名单(顺序即 class_id);[]=全排除
     if options.classes is None:
-        names = sorted({o.findtext("name", "").strip()
-                        for xf in xml_files
-                        for o in ET.parse(xf).getroot().iter("object")})
+        found: set[str] = set()
+        for index, xf in enumerate(xml_files, 1):
+            found.update(o.findtext("name", "").strip() for o in ET.parse(xf).getroot().iter("object"))
+            if options.on_progress: options.on_progress(index, len(xml_files)*2)
+        names = sorted(found)
         classes = [n for n in names if n]
     else:
         classes = list(options.classes)
     class_to_idx = {n: i for i, n in enumerate(classes)}
 
-    for xf in xml_files:
+    for index, xf in enumerate(xml_files, 1):
         root = ET.parse(xf).getroot()
         size = root.find("size")
         if size is None:
@@ -49,4 +51,7 @@ def convert_pascal_voc(input_dir: Path, output_labels_dir: Path,
             lines.append(f"{class_to_idx[name]} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
         (output_labels_dir / f"{xf.stem}.txt").write_text(
             "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        if options.on_progress:
+            offset = len(xml_files) if options.classes is None else 0
+            options.on_progress(offset+index, offset+len(xml_files))
     return classes

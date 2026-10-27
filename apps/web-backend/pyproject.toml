@@ -10,10 +10,12 @@ dependencies = ["od-platform", "Django>=5.2,<5.3", "Pillow>=10,<13", "uvicorn>=0
 
 [project.optional-dependencies]
 workbench = ["streamlit>=1.66,<2"]
+demo = ["gradio>=6,<7"]
 test = ["pytest-django>=4.11,<5"]
 
 [project.scripts]
 odp-web = "od_web.app:main"
+odp-gradio = "od_web.gradio_demo:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/od_web"]

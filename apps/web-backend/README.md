@@ -4,19 +4,19 @@
 
 采用 Django 5.2 的路由、视图、表单、ORM、数据库迁移、CSRF 与 Admin。
 Vue 3 用于数据集管理交互，沿用现有绿色监控界面。Vue 生产文件随包提供，页面不依赖外部 CDN。
-训练、独立测试和图片推理由远程 CUDA GPU 上的 `apps/platform` 独立进程执行。
+训练、独立测试和图片/视频推理由远程 CUDA GPU 上的 `apps/platform` 独立进程执行。
 本机负责 Django 界面、数据导入与质检、结果归档；远程不可用时不回退到本机 CPU。
 
 ## 启动
 
 ```powershell
-pip install -e "./apps/platform[mixercseg,cpu]"
-pip install -e "./apps/web-backend[workbench,test]"
-powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
+pip install -e ./apps/platform
+pip install -e "./apps/web-backend[workbench,test,demo]"
+powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench -Demo
 ```
 
 `odp-web --port 8000` 自动迁移数据库、收集静态文件并启动 Django ASGI 服务。
-面板：<http://127.0.0.1:8000/#datasets>；Streamlit：<http://127.0.0.1:8501>。
+面板：<http://127.0.0.1:8000/#datasets>；Streamlit：<http://127.0.0.1:8501>；Gradio：<http://127.0.0.1:7860>。
 启动脚本要求端口上的健康接口返回 `framework: django`，避免把旧服务误认为迁移完成。
 服务绑定本机回环地址，本版本定位为本机/实验室工作台。
 
@@ -59,7 +59,22 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench
 
 助手发送当前会话、所选数据集的类别/划分/质检摘要、关联实验最近五轮指标及独立测试报告。
 不发送原图、视频、权重、SSH 信息和训练日志。回答为纯文本，按 DeepSeek 账户实际调用计费。
-当前完成的是数据与实验问答；视频检测后自动解释仍需接通视频任务与摘要，不能将此入口视为视频链路已验收。
+视频检测完成后自动将结构化类别摘要交给 DeepSeek，可查看状态及重试；解释失败不影响已完成的检测产物。
+
+## 视频、展示与运行维护
+
+`#project` 介绍模块与工程改进；`#understanding` 按当前数据集展示类别分布、集合大小、采集分组、分辨率及指纹。
+Streamlit 选择数据集后同步切换训练、监控、质检和结果。Gradio 复用 Django API 提交图片/视频任务，不在本机加载模型。
+
+`#video` 接收 MP4/AVI/MOV/MKV，最大 200 MiB、120 秒、60 FPS、7200 帧、1920×1080 像素总量。
+提交前检查文件可解码与元数据，处理时复核实际帧数/尺寸。远程逐帧检测，输出 H.264 MP4、JSONL、抽样图和类别摘要。
+视频输出需要远程安装 `imageio-ffmpeg>=0.6,<1`（核心包依赖）；网页支持 Range 播放和文件下载。
+帧出现次数不是独立目标数；没有视频标注不能计算准确率，检测结果不支持航速或风险结论。
+
+`#maintenance` 提供 runs 策略预览、配置、回收和恢复，CLI 为 `odp-retention`（预览）、`--apply`、`--restore <id>`。
+策略默认关闭。启用后每天检查：按年龄/容量选择已审计的旧目录，保留最近若干次，保护活动 PID 和所有台账引用。
+只处理 training/detection_infer/semantic_infer/inference，不处理数据集、模型库、web_jobs 和无审计目录。
+候选先移至 `.odp-meta/run_trash/`，可恢复；默认 14 天、最少 7 天后永久清理回收区。移入回收区本身不会释放磁盘空间。
 
 ## 配置远程 GPU
 
@@ -124,12 +139,18 @@ Admin：<http://127.0.0.1:8000/admin/>。管理员由使用者自行创建；没
 | GET /api/datasets/template | 下载合成样本 ZIP |
 | GET /api/datasets/<id> | 导入状态与统计 |
 | GET /api/datasets/<id>/previews | 原图与类别目标框预览 |
+| GET /api/datasets/<id>/statistics | 类别、划分、采集分组与分辨率 |
 | POST /api/datasets/<id>/validate | 重做质检 |
 | GET /api/config | 默认训练配方和参数 Schema |
 | GET/POST /api/jobs | 实验列表 / 创建任务 |
 | POST /api/jobs/<id>/cancel | 协作停止 |
 | POST /api/uploads | 单图推理上传 |
+| POST /api/uploads/video | 视频上传及元数据检查 |
 | GET /api/jobs/<id>/artifacts | 验收报告、曲线、图片和权重 |
+| GET/POST /api/jobs/<id>/explanation | 视频解释状态 / 启动或重试 |
+| GET/POST /api/retention | 保留策略预览 / 配置 |
+| POST /api/retention/apply | 执行已启用策略 |
+| POST /api/retention/restore/<id> | 恢复回收目录 |
 
 写接口需要 Django CSRF cookie 和 `X-CSRFToken`；浏览器端及 Streamlit 已接入。
 
@@ -142,7 +163,8 @@ python -m build apps/web-backend
 
 验收覆盖 ZIP、TAR.GZ、文件夹、已有划分、错误标注、路径穿越、链接、大小限制及 CSRF。
 已通过真实 HTTP 提交 9 对合成样本到远程 GPU，完成 1 轮训练和独立测试，再使用新权重推理并回传可视化；
-该记录仅验证功能链路，不代表业务精度。此前 CrackMap 50 轮实验见
+该记录仅验证功能链路，不代表业务精度。2026-10-27 已完成 WSODD 正式 50 轮、全部产物回传与真实 GPU 视频/DeepSeek 链路，
+见 [本次验收](../../docs/acceptance-20261027.md)；当前 mAP50 16.92%，业务效果待改善。此前 CrackMap 50 轮实验见
 [完整训练报告](../../docs/crackmap-training-20261026.md)。
 
 实现参考 [Django 文件上传](https://docs.djangoproject.com/en/5.2/topics/http/file-uploads/)、
