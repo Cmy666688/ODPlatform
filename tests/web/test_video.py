@@ -26,13 +26,14 @@ def test_video_upload_and_gpu_admission_without_local_fallback(web, monkeypatch)
     identifier = "3"*32; folder = store.root / identifier; folder.mkdir()
     weight = root / "best.pt"; weight.write_bytes(b"test weights")
     (folder / "status.json").write_text(json.dumps({"id": identifier, "kind": "training", "status": "completed",
-        "config": {"backend": "yolo", "data": "wsodd", "imgsz": 640}, "best_weight": str(weight)}))
+        "config": {"backend": "yolo", "data": "wsodd", "imgsz": 960, "architecture": "yolov8s.pt"}, "best_weight": str(weight)}))
     payload = {"kind": "inference", "media_type": "video", "upload_id": value.json()["id"], "model_id": "trained:" + identifier}
     assert client.post("/api/jobs", json=payload).status_code == 409
     monkeypatch.setattr(app, "_hardware", lambda: {"cuda_available": True})
     documents = []; monkeypatch.setattr(store, "create", lambda row: documents.append(row) or {"id": "b"*32})
     assert client.post("/api/jobs", json=payload).status_code == 202
     assert documents[0]["config"]["device"] == "cuda" and documents[0]["media_type"] == "video"
+    assert documents[0]["config"]["imgsz"] == 960 and documents[0]["config"]["architecture"] == "yolov8s.pt"
     assert client.post("/api/jobs", json={**payload,"upload_id": "../" + value.json()["id"]}).status_code == 422
 
 

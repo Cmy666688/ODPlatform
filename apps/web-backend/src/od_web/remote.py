@@ -214,12 +214,14 @@ def prepare(connection: Connection, directory: Path, request: dict):
         if request["config"].get("backend") == "yolo":
             import yaml
             dataset = yaml.safe_load(yaml_path.read_text(encoding="utf-8")); root = paths.ROOT_DIR / dataset["path"]
+            connection.put_json(document, remote / "runs/web_jobs" / directory.name / "request.json")
+            ready = connection.command(["dataset_ready", directory.name]).get("ready", False)
             # 约 1.8 GB、上万文件使用单个受控包传输,避免逐文件往返。
             bundle = directory / "dataset.tar"
             targets = [yaml_path, *sorted(root.rglob("*.jpg")), *sorted(root.rglob("*.txt")), paths.ROOT_DIR / dataset["manifest_path"]]
             pretrained = paths.PRETRAINED_MODELS_DIR / request["config"]["architecture"]
             if pretrained.is_file(): targets.append(pretrained)
-            if not bundle.exists():
+            if not ready and not bundle.exists():
                 with tarfile.open(bundle.with_suffix(".building"), "w") as archive:
                     for source in targets:
                         if source.is_symlink() or not source.resolve().is_relative_to(paths.ROOT_DIR.resolve()): raise ValueError("检测数据超出项目目录")
@@ -230,9 +232,13 @@ def prepare(connection: Connection, directory: Path, request: dict):
                 state = json.loads(state_file.read_text(encoding="utf-8"))
                 state.update(upload_bytes=done, upload_total_bytes=total, phase="uploading")
                 write_json(state_file, state)
-            connection.put(bundle, remote / "runs/web_jobs" / directory.name / "dataset.tar", on_progress=progress)
-            connection.put_json(document, remote / "runs/web_jobs" / directory.name / "request.json")
-            connection.command(["unpack", directory.name]); targets = []
+            if not ready:
+                connection.put(bundle, remote / "runs/web_jobs" / directory.name / "dataset.tar", on_progress=progress)
+                connection.command(["unpack", directory.name])
+            elif pretrained.is_file():
+                connection.put(pretrained, remote / pretrained.relative_to(paths.ROOT_DIR).as_posix())
+            document["dataset_transfer"] = "verified_remote_reuse" if ready else "uploaded_archive"
+            targets = []
         else:
             dataset, root = load_semantic_dataset(yaml_path)
             targets = [yaml_path, *sorted(root.rglob("*.png")), paths.ROOT_DIR / dataset["manifest_path"]]

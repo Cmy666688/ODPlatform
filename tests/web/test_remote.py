@@ -59,7 +59,9 @@ def test_prepare_transfers_dataset_manifest_and_every_pair(web, inline_import, m
         sftp = SimpleNamespace(stat=lambda _: (_ for _ in ()).throw(FileNotFoundError()))
         def put(self, source, target, **kwargs): files.append((source, str(target)))
         def put_json(self, value, target): documents[str(target)] = value
-        def command(self, arguments): assert arguments == ["unpack", directory.name]
+        def command(self, arguments):
+            if arguments == ["dataset_ready", directory.name]: return {"ready": False}
+            assert arguments == ["unpack", directory.name]
     remote.prepare(Transfer(), directory, {"kind": "training", "config": {"backend": "yolo", "architecture": "yolov8n.pt", "data": identifier, "device": "cpu"}})
     import tarfile
     assert files[0][1].endswith("dataset.tar")
@@ -73,6 +75,43 @@ def test_prepare_transfers_dataset_manifest_and_every_pair(web, inline_import, m
     assert request["config"]["device"] == "cuda"
     initial = documents[f"/gpu/project/runs/web_jobs/{directory.name}/status.json"]
     assert initial["execution"] == "local" and "remote_managed" not in initial
+
+
+def test_verified_remote_dataset_skips_bundle_build_and_upload(web, inline_import, monkeypatch):
+    client, store, root = web
+    monkeypatch.setattr(paths, "PRETRAINED_MODELS_DIR", root / "models/pretrained")
+    identifier = upload_template(client).json()["id"]
+    directory = store.root / ("e"*32); directory.mkdir(); write_json(directory / "status.json", {"status":"queued"})
+    documents = {}
+    class Transfer:
+        config = SimpleNamespace(root="/gpu/project")
+        sftp = SimpleNamespace(stat=lambda _: (_ for _ in ()).throw(FileNotFoundError()))
+        def put(self, *args, **kwargs): pytest.fail("已核验数据不应重新上传数据包")
+        def put_json(self, value, target): documents[str(target)] = value
+        def command(self, arguments):
+            assert arguments == ["dataset_ready", directory.name]
+            return {"ready": True}
+    remote.prepare(Transfer(), directory, {"kind":"training", "config":{"backend":"yolo", "architecture":"yolov8s.pt", "data":identifier}})
+    assert not (directory / "dataset.tar").exists()
+    assert documents[f"/gpu/project/runs/web_jobs/{directory.name}/request.json"]["dataset_transfer"] == "verified_remote_reuse"
+
+
+def test_remote_reuse_requires_matching_fingerprint_and_current_labels(web, inline_import):
+    client, store, root = web
+    identifier = upload_template(client).json()["id"]
+    import yaml
+    document = yaml.safe_load(paths.dataset_yaml_path(identifier).read_text(encoding="utf-8"))
+    directory = store.root / ("b"*32); directory.mkdir()
+    request = {"config":{"backend":"yolo", "data":identifier}, "dataset_fingerprint":document["data_fingerprint"]}
+    write_json(directory / "request.json", request)
+    assert remote_agent.dataset_ready(directory.name)["ready"]
+    request["dataset_fingerprint"] = "wrong"; write_json(directory / "request.json", request)
+    assert not remote_agent.dataset_ready(directory.name)["ready"]
+    request["dataset_fingerprint"] = document["data_fingerprint"]; write_json(directory / "request.json", request)
+    label = next((root / document["path"] / "labels").rglob("*.txt")); label.write_text("0 .5 .5 -.2 .1\n")
+    assert not remote_agent.dataset_ready(directory.name)["ready"]
+    request["config"]["data"] = "../secrets"; write_json(directory / "request.json", request)
+    with pytest.raises(ValueError): remote_agent.dataset_ready(directory.name)
 
 
 @pytest.mark.parametrize("value", ["../secret", "/root/secret", "C:/secret", "runs/../../secret", "runs\\secret", "models/secret"])
@@ -125,6 +164,23 @@ def test_expired_hardware_cache_does_not_report_stale_gpu_ready(web, monkeypatch
     monkeypatch.setattr(remote, "Connection", offline)
     result = remote.hardware(force=True)
     assert not result["cuda_available"] and not result["connected"] and "offline" in result["message"]
+
+
+def test_sync_progress_reports_local_artifacts_without_claiming_job_complete(web):
+    client, store, root = web; identifier = "c"*32; directory = store.root / identifier; directory.mkdir()
+    run = root / "runs/training/sync-example"; run.mkdir(parents=True)
+    (run / "best.pt").write_bytes(b"best")
+    images = directory / "evaluation/comparisons"; images.mkdir(parents=True)
+    (images / "a.png").write_bytes(b"123"); (images / "b.png.download").write_bytes(b"12345")
+    state = {"id": identifier, "status": "running", "phase": "syncing", "kind": "training", "execution": "remote",
+             "config": {"backend": "yolo"}, "run_dir": "runs/training/sync-example", "dataset_counts": {"test": 3}}
+    write_json(directory / "status.json", state)
+    response = client.get(f"/api/jobs/{identifier}").json()
+    assert response["status"] == "running" and response["phase"] == "syncing"
+    assert response["sync_progress"] == {"comparisons": 1, "expected_comparisons": 3, "received_bytes": 12}
+    assert "sync_progress" not in json.loads((directory / "status.json").read_text())
+    state["dataset_counts"] = None; write_json(directory / "status.json", state)
+    assert store.read(identifier)["sync_progress"]["expected_comparisons"] == 48
 
 
 def test_recovered_bridge_does_not_overwrite_running_inputs_or_relaunch(web, monkeypatch):

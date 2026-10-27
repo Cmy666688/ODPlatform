@@ -104,7 +104,15 @@ def config(request):
     semantic = datasets.describe(identifier)["task"] != "detect"
     defaults = load_mixercseg_config("mixercseg_full", {"device": "cuda", "scan_backend": "reference"}) if semantic else DetectionConfig()
     defaults.data = identifier
-    return {"defaults": defaults.model_dump(), "schema": (MixerCSegConfig if semantic else DetectionConfig).model_json_schema(), "execution": "remote"}
+    profiles = []
+    if not semantic:
+        import yaml
+        for key, title in (("wsodd_fast_4090", "4090 快速训练 · WSODD 10 分钟目标"), ("wsodd_accuracy", "小目标精度方案 · 960 输入")):
+            configuration = DetectionConfig(**yaml.safe_load(paths.runtime_config_path(key).read_text(encoding="utf-8")))
+            configuration.data = identifier
+            profiles.append({"id": key, "name": title, "config": configuration.model_dump()})
+    return {"defaults": defaults.model_dump(), "profiles": profiles,
+            "schema": (MixerCSegConfig if semantic else DetectionConfig).model_json_schema(), "execution": "remote"}
 
 
 @endpoint(["GET"])

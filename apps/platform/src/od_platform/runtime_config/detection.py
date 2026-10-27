@@ -28,6 +28,9 @@ class DetectionConfig(BaseModel):
     imgsz: int = Field(default=640, ge=320, le=1280)
     num_threads: int = Field(default=4, ge=0, le=16)
     torch_threads: int = Field(default=4, ge=1)
+    cache: Literal[False, "ram", "disk"] = False
+    rect: bool = False
+    deterministic: bool = True
     threshold: float = Field(default=0.25, gt=0, lt=1)
     iou: float = Field(default=0.7, gt=0, lt=1)
     max_train_batches: Optional[int] = Field(default=None, ge=1)

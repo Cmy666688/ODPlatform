@@ -46,6 +46,19 @@ class JobStore:
                 state.update(status="failed", phase="failed", error="工作进程已退出,未写入完成结果", finished_at=utc_now())
                 write_json(directory / "status.json", state)
         state["cancel_requested"] = (directory / "cancel.request").exists()
+        if state.get("phase") == "syncing" and state.get("kind") == "training" and state.get("config", {}).get("backend") == "yolo":
+            # 回传进程可能长时间下载大图;按本机已落盘文件计算进度,不再表现成 GPU 仍在训练。
+            root = (paths.ROOT_DIR / state.get("run_dir", "runs/nonexistent")).resolve()
+            if root.is_relative_to(paths.RUNS_DIR.resolve()):
+                evaluation = directory / "evaluation"
+                files = [file for folder in (root, evaluation) for file in folder.rglob("*") if file.is_file()]
+                total = (state.get("dataset_counts") or {}).get("test", 48)
+                received = 0
+                for file in files:
+                    try: received += file.stat().st_size
+                    except FileNotFoundError: pass  # .download 可能刚刚原子改名
+                state["sync_progress"] = {"comparisons": len(list((evaluation / "comparisons").glob("*.png"))),
+                                          "expected_comparisons": min(48, total), "received_bytes": received}
         return state
 
     def list(self) -> list[dict]:

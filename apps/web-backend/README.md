@@ -1,6 +1,6 @@
 # apps/web-backend — Django 数据集与训练工作台
 
-当前默认数据与模型为 **WSODD / YOLOv8n 水面目标检测**，具体数据划分和完整训练配方见 [WSODD 实验说明](../../docs/wsodd-training.md)。网页现已支持多类别 VOC / YOLO 压缩包和文件夹上传。
+当前默认数据为 **WSODD 水面目标检测**，训练配置可选择 YOLOv8 快速方案和精度方案，具体划分与实测差异见 [WSODD 实验说明](../../docs/wsodd-training.md)。网页支持多类别 VOC / YOLO 压缩包和文件夹上传。
 
 采用 Django 5.2 的路由、视图、表单、ORM、数据库迁移、CSRF 与 Admin。
 Vue 3 用于数据集管理交互，沿用现有绿色监控界面。Vue 生产文件随包提供，页面不依赖外部 CDN。
@@ -43,7 +43,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start_web.ps1 -Workbench -Demo
 验证或测试缺类为 WARNING,缺失类不伪造 AP。原始上传包保留。
 
 选择数据集后,训练配方、类别数、监控和推理权重按当前数据集切换。训练与独立测试始终在远程 CUDA GPU 执行,
-采用 YOLOv8n,完成后回传 mAP50、mAP50–95、逐类 CSV、PR 曲线、混淆矩阵、检测框对比图及 best/last 权重。
+可选 YOLOv8n/s/m，完成后回传 mAP50、mAP50–95、逐类 CSV、PR 曲线、混淆矩阵、检测框对比图及 best/last 权重。
 网页提供港区目标检测合成模板,仅验证流程,不代表业务数据或模型精度。
 历史分割数据和实验保留,不列入当前目标检测数据集列表。
 
@@ -164,7 +164,7 @@ python -m build apps/web-backend
 验收覆盖 ZIP、TAR.GZ、文件夹、已有划分、错误标注、路径穿越、链接、大小限制及 CSRF。
 已通过真实 HTTP 提交 9 对合成样本到远程 GPU，完成 1 轮训练和独立测试，再使用新权重推理并回传可视化；
 该记录仅验证功能链路，不代表业务精度。2026-10-27 已完成 WSODD 正式 50 轮、全部产物回传与真实 GPU 视频/DeepSeek 链路，
-见 [本次验收](../../docs/acceptance-20261027.md)；当前 mAP50 16.92%，业务效果待改善。此前 CrackMap 50 轮实验见
+见 [本次验收](../../docs/acceptance-20261027.md)；后续精度方案 mAP50 23.76%，快速方案 11.67%，业务效果待改善。此前 CrackMap 50 轮实验见
 [完整训练报告](../../docs/crackmap-training-20261026.md)。
 
 实现参考 [Django 文件上传](https://docs.djangoproject.com/en/5.2/topics/http/file-uploads/)、

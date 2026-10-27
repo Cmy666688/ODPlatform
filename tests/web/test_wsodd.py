@@ -133,8 +133,10 @@ def test_wsodd_submission_forces_remote_cuda_and_uses_detection_recipe(web, monk
     assert requests[0]["config"]["backend"] == "yolo" and requests[0]["config"]["device"] == "cuda"
     assert requests[0]["config"]["epochs"] == 50 and requests[0]["dataset_fingerprint"]
     assert client.post("/api/jobs", json={"kind": "training", "config": {"backend": "mixercseg", "data": "wsodd"}}).status_code == 422
-    defaults = client.get("/api/config").json()["defaults"]
+    document = client.get("/api/config").json(); defaults = document["defaults"]
     assert defaults["architecture"] == "yolov8n.pt" and defaults["imgsz"] == 640
+    fast = next(row["config"] for row in document["profiles"] if row["id"] == "wsodd_fast_4090")
+    assert fast["data"] == "wsodd" and fast["epochs"] == 30 and fast["rect"] and fast["cache"] == "ram"
 
 
 def test_deterministic_groups_do_not_depend_on_row_order():

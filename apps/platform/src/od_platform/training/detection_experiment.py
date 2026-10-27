@@ -179,7 +179,8 @@ def run(job_dir: Path) -> int:
                                      weight_decay=config.weight_decay, seed=config.seed, workers=config.num_threads, patience=0,
                                      cos_lr=config.cos_lr, warmup_bias_lr=config.warmup_bias_lr, mosaic=config.mosaic,
                                      scale=config.scale, hsv_s=config.hsv_s, close_mosaic=min(config.close_mosaic, config.epochs),
-                                     deterministic=True, amp=True, plots=True, save=True, pretrained=True)
+                                     cache=config.cache, rect=config.rect, deterministic=config.deterministic,
+                                     amp=True, plots=True, save=True, pretrained=True)
             kwargs = recipe.to_ultralytics_kwargs(); kwargs.pop("model", None)
             kwargs.update(project=str(context.run_dir.parent), name=context.run_id, exist_ok=True)
             model.train(**kwargs)

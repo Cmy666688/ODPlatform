@@ -1,0 +1,27 @@
+# 4090 / WSODD 的 10 分钟目标配方;从 COCO 预训练重新训练,不复用旧实验权重。
+# 使用全部训练样本,更改分辨率、增强与轮数;精度必须与原实验分别验收。
+backend: yolo
+data: wsodd
+architecture: yolov8s.pt
+device: cuda
+epochs: 30
+batch_size_train: 64
+batch_size_test: 32
+imgsz: 640
+lr: 0.001
+weight_decay: 0.0005
+optimizer: AdamW
+cos_lr: true
+warmup_bias_lr: 0.01
+mosaic: 0.0
+scale: 0.3
+hsv_s: 0.5
+close_mosaic: 0
+seed: 42
+num_threads: 8
+torch_threads: 4
+cache: ram
+rect: true
+deterministic: false
+threshold: 0.25
+iou: 0.7

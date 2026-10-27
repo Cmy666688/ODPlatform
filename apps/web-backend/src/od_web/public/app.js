@@ -16,7 +16,8 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&
 const number = (value, places = 4) => Number.isFinite(value) ? value.toFixed(places) : "—";
 const percent = (value) => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "—";
 const badge = (label, kind = "neutral") => `<span class="badge ${kind}">${esc(label)}</span>`;
-const statusBadge = (job) => badge(job.cancel_requested && active(job) ? "正在停止" : statusNames[job.status] || job.status, job.status === "completed" ? "success" : job.status === "failed" ? "danger" : active(job) ? "warning" : "neutral");
+const statusText = (job) => job.status === "running" && job.phase === "syncing" ? "结果回传中" : statusNames[job.status] || job.status;
+const statusBadge = (job) => badge(job.cancel_requested && active(job) ? "正在停止" : statusText(job), job.status === "completed" ? "success" : job.status === "failed" ? "danger" : active(job) ? "warning" : "neutral");
 const empty = (title, message) => `<div class="empty"><strong>${esc(title)}</strong><span>${esc(message)}</span></div>`;
 
 async function api(path, options = {}) {
@@ -118,6 +119,8 @@ function renderOverview() {
   $("#dataset-task").textContent = detection ? `${Object.keys(data.dataset.names || {}).length} 类目标检测` : "二值语义分割";
   const fields = $("#training-form").elements;
   $("#detection-options").hidden = !detection;
+  $("#performance-options").hidden = !detection;
+  $("#training-profile-label").hidden = !detection;
   $("#recipe-summary").innerHTML = detection ? `<span>${esc(fields.architecture.value.replace("yolo", "YOLO").replace(".pt", ""))}</span><span>${fields.imgsz.value} × ${fields.imgsz.value}</span><span>AdamW</span><span>${Object.keys(data.dataset.names || {}).length} 类目标检测</span>` : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
   $("#f1-target-label").hidden = detection;
   $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
@@ -142,7 +145,7 @@ function renderOverview() {
   $("#start-training").disabled = !hardware.cuda_available || state.jobs.some(active) || !data.dataset.trainable;
   $("#start-training").textContent = !data.dataset.trainable ? "数据集尚未就绪" : hardware.cuda_available ? "开始远程 GPU 训练" : "等待远程 GPU";
   const select = $("#monitor-job");
-  const options = '<option value="">新实验 / 待启动</option>' + training.map((job) => `<option value="${job.id}">${esc(job.name)} · ${statusNames[job.status]}</option>`).join("");
+  const options = '<option value="">新实验 / 待启动</option>' + training.map((job) => `<option value="${job.id}">${esc(job.name)} · ${statusText(job)}</option>`).join("");
   if (select.innerHTML !== options) { select.innerHTML = options; select.value = state.monitorId; }
   renderMonitor();
   $("#recent-jobs").innerHTML = jobTable(state.jobs.filter((job) => job.config?.data === state.datasetId), 3);
@@ -173,27 +176,29 @@ function renderMonitor() {
   $("#step-train-count").textContent = `${epochs} epochs`;
   $("#step-test-count").textContent = job?.dataset_counts?.test ? `${job.dataset_counts.test} 张测试图` : "所选数据集的独立测试集";
   $("#training-name").textContent = job?.name || "等待新实验";
-  $("#training-status").outerHTML = `<span id="training-status" class="badge ${job ? job.status === "completed" ? "success" : job.status === "failed" ? "danger" : "neutral" : "neutral"}">${job ? esc(statusNames[job.status]) : "待训练"}</span>`;
-  $("#training-dot").classList.toggle("running", Boolean(job && active(job)));
+  $("#training-status").outerHTML = `<span id="training-status" class="badge ${job ? job.status === "completed" ? "success" : job.status === "failed" ? "danger" : "neutral" : "neutral"}">${job ? esc(statusText(job)) : "待训练"}</span>`;
+  $("#training-dot").classList.toggle("running", Boolean(job && active(job) && job.phase !== "syncing"));
   $("#metric-epoch").innerHTML = `${history.length || "—"} <small>/ ${epochs}</small>`;
   $("#metric-loss").textContent = number(last?.train_loss);
   const detection = (job?.config?.backend || state.defaults?.backend) === "yolo";
-  $("#metric-score-label").textContent = detection ? "最近一轮验证 mAP50–95" : "最近一轮验证 F1";
-  $("#metric-score-note").textContent = detection ? "检测框 IoU 0.50–0.95 · 测试指标见结果页" : "固定阈值 0.5 · 测试指标见结果页";
-  $("#metric-f1").textContent = percent(detection ? last?.validation?.mAP50_95 : last?.validation?.F1);
+  const tested = detection && Number.isFinite(job?.metrics?.mAP50);
+  $("#metric-score-label").textContent = tested ? "独立测试 mAP50" : detection ? "最近一轮验证 mAP50–95" : "最近一轮验证 F1";
+  $("#metric-score-note").textContent = tested ? "验证集选出的最佳权重 · 完整测试集" : detection ? "检测框 IoU 0.50–0.95 · 测试指标见结果页" : "固定阈值 0.5 · 测试指标见结果页";
+  $("#metric-f1").textContent = percent(tested ? job.metrics.mAP50 : detection ? last?.validation?.mAP50_95 : last?.validation?.F1);
   $("#metric-time").textContent = duration(job?.elapsed_seconds);
-  $("#metric-eta").textContent = job?.status === "completed" ? "实验已结束" : job?.eta_seconds ? `预计剩余 ${duration(job.eta_seconds)}` : "启动后显示预计剩余时间";
+  $("#metric-eta").textContent = job?.status === "completed" ? "实验已结束" : job?.phase === "syncing" ? "训练与测试已结束，产物回传中" : job?.eta_seconds ? `预计剩余 ${duration(job.eta_seconds)}` : "启动后显示预计剩余时间";
   $("#metric-epoch-note").textContent = job ? `${phaseNames[job.phase] || job.phase}${job.epoch ? ` · 第 ${job.epoch} 轮` : ""}` : "完整训练";
   $("#chart-update").textContent = last ? `已记录 ${history.length} 轮` : "等待训练开始";
   drawChart(history);
   const progress = Math.max(0, Math.min(1, job?.progress || 0));
   $("#progress-label").textContent = percent(progress); $("#progress-bar").style.width = `${progress * 100}%`;
   $("#step-data").className = state.overview?.dataset?.available && state.overview?.quality?.overall_severity !== "ERROR" ? "done" : "";
-  $("#step-train").className = job?.phase === "testing" || job?.status === "completed" ? "done" : job && active(job) ? "active" : "";
-  $("#step-test").className = job?.status === "completed" ? "done" : job?.phase === "testing" ? "active" : "";
-  $("#step-results").className = job?.status === "completed" ? "done" : "";
+  $("#step-train").className = ["testing", "visualizing", "syncing", "completed"].includes(job?.phase) ? "done" : job && active(job) ? "active" : "";
+  $("#step-test").className = ["visualizing", "syncing", "completed"].includes(job?.phase) ? "done" : job?.phase === "testing" ? "active" : "";
+  $("#step-results").className = job?.status === "completed" ? "done" : ["visualizing", "syncing"].includes(job?.phase) ? "active" : "";
   $("#batch-progress").textContent = job?.error || (job ? `${phaseNames[job.phase] || statusNames[job.status]}${job.batch ? ` · ${job.batch} / ${job.batches || "—"} 批` : ""}${job.cancel_requested ? " · 已请求停止，等待当前计算结束" : ""}` : "训练尚未启动。GPU 就绪后可提交完整实验。");
   if (job?.phase === "uploading" && job.upload_total_bytes) $("#batch-progress").textContent += ` · ${number(job.upload_bytes / 1024 ** 2, 0)} / ${number(job.upload_total_bytes / 1024 ** 2, 0)} MB · ${percent(job.upload_bytes / job.upload_total_bytes)}`;
+  if (job?.phase === "syncing" && job.sync_progress) $("#batch-progress").textContent = `训练和独立测试已完成 · 已接收 ${number(job.sync_progress.received_bytes/1024**2, 1)} MB · 对比图 ${job.sync_progress.comparisons} / ${job.sync_progress.expected_comparisons} 张`;
 }
 
 function renderQuality(quality) {
@@ -230,7 +235,7 @@ async function refresh(silent = false) {
   state.busy = true;
   try {
     state.overview = await api(`/api/overview?dataset=${encodeURIComponent(state.datasetId)}`); state.jobs = state.overview.jobs;
-    if (!state.defaults) state.defaults = (await api(`/api/config?dataset=${encodeURIComponent(state.datasetId)}`)).defaults;
+    if (!state.defaults) await loadTrainingConfig();
     window.dispatchEvent(new CustomEvent("odp:overview", { detail: state.overview }));
     $("#connection-dot").classList.add("connected"); $("#connection-text").textContent = "服务已连接";
     renderOverview();
@@ -300,26 +305,44 @@ async function uploadImage(file) {
 
 function draft() {
   const values = new FormData($("#training-form"));
-  const model = state.defaults.backend === "yolo" ? { architecture: values.get("architecture"), imgsz: Number(values.get("imgsz")) } : {};
-  return { name: values.get("name"), config: { ...state.defaults, ...model, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: state.defaults.backend === "yolo" || values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
+  const model = state.defaults.backend === "yolo" ? { architecture: values.get("architecture"), imgsz: Number(values.get("imgsz")), cache: values.get("cache") === "off" ? false : values.get("cache"), rect: values.get("rect") === "true", deterministic: values.get("deterministic") === "true", num_threads: Number(values.get("num_threads")) } : {};
+  return { name: values.get("name"), config: { ...(state.recipe || state.defaults), ...model, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: state.defaults.backend === "yolo" || values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
+}
+
+async function loadTrainingConfig() {
+  const document = await api(`/api/config?dataset=${encodeURIComponent(state.datasetId)}`);
+  state.defaults = document.defaults; state.profiles = document.profiles || [];
+  $("#training-profile").innerHTML = '<option value="">自定义配置</option>' + state.profiles.map((profile) => `<option value="${esc(profile.id)}">${esc(profile.name)}</option>`).join("");
+}
+
+function applyTrainingConfig(config) {
+  state.recipe = { ...state.defaults, ...config };
+  const fields = $("#training-form").elements;
+  for (const key of ["epochs", "batch_size_train", "lr", "seed"]) fields[key].value = state.recipe[key];
+  if (state.recipe.backend === "yolo") {
+    for (const key of ["architecture", "imgsz", "num_threads", "rect", "deterministic"]) fields[key].value = String(state.recipe[key]);
+    fields.cache.value = state.recipe.cache || "off";
+  }
+  $("#training-profile-note").textContent = "WSODD / 4090 实测快速方案计算约 8 分 56 秒，测试 mAP50 为 11.67%，低于 960 精度方案的 23.76%。上传与结果回传单独计时；其他数据集耗时与精度可能不同。";
 }
 
 function openConfig() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem("odp-training-draft")); } catch (_) { /* 无合法草稿时采用默认配方 */ }
   if (saved?.config?.data !== state.datasetId || saved?.config?.backend !== state.defaults.backend) saved = null;
+  const profile = !saved ? state.profiles?.[0] : null;
+  $("#training-profile").value = profile?.id || "";
+  applyTrainingConfig(saved?.config || profile?.config || state.defaults);
   if (saved) {
     const form = $("#training-form"); form.elements.name.value = saved.name;
     for (const field of ["epochs", "batch_size_train", "lr", "seed"]) form.elements[field].value = saved.config[field];
     form.elements.min_f1.value = saved.min_f1 ?? "";
   } else {
     const form = $("#training-form");
-    for (const field of ["epochs", "batch_size_train", "lr", "seed"]) form.elements[field].value = state.defaults[field];
     form.elements.min_f1.value = "";
   }
   if (!saved || saved.config.data !== state.datasetId) $("#training-form").elements.name.value = `${state.overview.dataset.name} 完整实验`;
   $("#training-dataset").value = state.datasetId;
-  for (const field of ["architecture", "imgsz"]) $("#training-form").elements[field].value = (saved?.config || state.defaults)[field] || (field === "architecture" ? "yolov8n.pt" : 640);
   renderOverview();
   $("#config-dialog").showModal();
 }
@@ -347,6 +370,10 @@ $("#active-dataset").addEventListener("change", (event) => selectDataset(event.t
 $("#training-dataset").addEventListener("change", (event) => selectDataset(event.target.value));
 $("#training-device").addEventListener("change", () => renderOverview());
 for (const name of ["architecture", "imgsz"]) $("#training-form").elements[name].addEventListener("change", renderOverview);
+$("#training-profile").addEventListener("change", (event) => {
+  const profile = state.profiles.find((item) => item.id === event.target.value);
+  applyTrainingConfig(profile?.config || state.defaults); renderOverview();
+});
 $("#monitor-job").addEventListener("change", (event) => { state.monitorId = event.target.value; state.monitorChosen = true; renderOverview(); });
 $("#close-config").addEventListener("click", () => $("#config-dialog").close());
 $("#save-draft").addEventListener("click", () => { if (!$("#training-form").reportValidity()) return; state.draft = draft(); localStorage.setItem("odp-training-draft", JSON.stringify(state.draft)); $("#config-dialog").close(); renderMonitor(); toast("训练配置已保存，未启动训练"); });
@@ -381,7 +408,7 @@ window.addEventListener("hashchange", route);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(true); });
 
 async function initialize() {
-  try { state.defaults = (await api(`/api/config?dataset=${encodeURIComponent(state.datasetId)}`)).defaults; } catch (error) { toast(error.message, true); }
+  try { await loadTrainingConfig(); } catch (error) { toast(error.message, true); }
   try { state.draft = JSON.parse(localStorage.getItem("odp-training-draft")); } catch (_) { /* 默认配置 */ }
   await refresh(); route();
   setInterval(() => { if (!document.hidden) refresh(true); }, 4000);

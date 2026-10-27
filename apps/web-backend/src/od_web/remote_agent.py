@@ -124,6 +124,22 @@ def snapshot(job_id: str) -> dict:
     return JobStore().read(job_id)
 
 
+def dataset_ready(job_id):
+    """相同数据身份且现存文件通过核验才能跳过重新上传;启动时仍做全量核验。"""
+    import re
+    from .jobs import JobStore
+    from od_platform.data_pipeline.wsodd import validate
+    request = json.loads((JobStore().directory(job_id) / "request.json").read_text(encoding="utf-8"))
+    identifier = request["config"]["data"]
+    if request["config"].get("backend") != "yolo" or not re.fullmatch(r"wsodd|ds_[0-9a-f]{16}", identifier):
+        raise ValueError("非法目标检测数据集 ID")
+    try:
+        report = validate(paths.dataset_yaml_path(identifier), use_cache=True, write_report=False)
+        return {"ready": report["overall_severity"] != "ERROR" and report["data_fingerprint"] == request.get("dataset_fingerprint")}
+    except (OSError, ValueError, KeyError):
+        return {"ready": False}
+
+
 def unpack(job_id):
     from .jobs import JobStore
     from od_platform.data_pipeline.import_dataset import safe_relative
@@ -154,7 +170,7 @@ def unpack(job_id):
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument("action", choices=["hardware", "check", "launch", "run", "snapshot", "unpack"])
+    parser = argparse.ArgumentParser(); parser.add_argument("action", choices=["hardware", "check", "launch", "run", "snapshot", "unpack", "dataset_ready"])
     parser.add_argument("job_id", nargs="?"); args = parser.parse_args()
     if args.action == "hardware": result = hardware()
     elif args.action == "check":
@@ -166,6 +182,7 @@ def main():
     elif args.action == "launch": result = launch(args.job_id)
     elif args.action == "snapshot": result = snapshot(args.job_id)
     elif args.action == "unpack": result = unpack(args.job_id)
+    elif args.action == "dataset_ready": result = dataset_ready(args.job_id)
     else: raise SystemExit(run(args.job_id))
     print("ODP_JSON=" + json.dumps(result, ensure_ascii=False), flush=True)
 

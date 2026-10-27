@@ -2,9 +2,9 @@
 
 通用目标检测开发平台（Monorepo）。
 
-当前默认 **WSODD / YOLOv8n 港区水域多类别目标检测**。提供 VOC/YOLO 大包上传、
+当前默认 **WSODD / YOLOv8 港区水域多类别目标检测**。提供 VOC/YOLO 大包上传、
 数据质检、远程 GPU 训练、独立测试、图片/视频可视化与 DeepSeek 摘要解释。
-本轮 50 轮训练及产物回传已完成，精度仍待改善；见 [验收记录](docs/acceptance-20261027.md)
+精度方案测试 mAP50 为 23.76%；4090 快速方案计算约 8 分 56 秒，但 mAP50 为 11.67%，见 [精度和速度记录](docs/accuracy-improvement-20261027.md)
 和 [工作清单](docs/task-completion.md)。
 
 历史 MixerCSeg 裂缝语义分割 CLI 保留，使用说明见 [MixerCSeg 文档](docs/mixercseg.md)：

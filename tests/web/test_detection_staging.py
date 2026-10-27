@@ -40,3 +40,16 @@ def test_improvement_config_is_bounded_and_keeps_old_baseline_defaults():
     assert improved.device == "cuda" and improved.imgsz == 960
     with pytest.raises(ValidationError): DetectionConfig(architecture="../../custom.pt")
     with pytest.raises(ValidationError): DetectionConfig(mosaic=2)
+
+
+def test_fast_recipe_keeps_full_data_and_exposes_performance_options():
+    from od_platform.common import paths
+    from od_platform.runtime_config.train import YOLOTrainConfig
+    fast = DetectionConfig(**yaml.safe_load(paths.runtime_config_path("wsodd_fast_4090").read_text(encoding="utf-8")))
+    assert fast.architecture == "yolov8s.pt" and fast.imgsz == 640 and fast.epochs == 30
+    assert fast.batch_size_train == 64 and fast.num_threads == 8 and fast.cache == "ram"
+    assert fast.rect and not fast.deterministic and fast.max_train_batches is None
+    engine = YOLOTrainConfig(cache=fast.cache, rect=fast.rect, deterministic=fast.deterministic).to_ultralytics_kwargs()
+    assert engine["cache"] == "ram" and engine["rect"] is True and engine["deterministic"] is False
+    with pytest.raises(ValidationError): DetectionConfig(cache="arbitrary")
+    with pytest.raises(ValidationError): DetectionConfig(num_threads=128)
