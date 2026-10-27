@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
+import sys
 import threading
 from uuid import uuid4
 
@@ -77,17 +80,28 @@ class JobStore:
                 raise RuntimeError("当前已有运行任务,请完成或停止后再提交")
             job_id = uuid4().hex
             directory = self.root / job_id; directory.mkdir()
-            request = {**request, "config": {**request["config"], "device": "cuda", "scan_backend": "reference"},
-                       "require_cuda": True, "created_at": utc_now()}
+            local = request.get("execution") == "local"
+            if local and (request.get("kind") != "inference" or request["config"].get("backend") != "yolo"):
+                raise ValueError("本机 CPU 仅支持 YOLO 推理")
+            request = {**request, "config": {**request["config"], "device": "cpu" if local else "cuda", "scan_backend": "reference"},
+                       "require_cuda": not local, "created_at": utc_now()}
             write_json(directory / "request.json", request)
             state = {"id": job_id, "kind": request["kind"], "status": "queued", "phase": "queued",
                      "created_at": request["created_at"], "config": request["config"], "progress": 0.0,
-                     "execution": "remote", "remote_managed": True, "connection_status": "connecting",
+                     "execution": "local" if local else "remote", "remote_managed": not local, "connection_status": "connected" if local else "connecting",
                      "history": [], "name": request.get("name", "CrackMap 完整实验")}
             state["media_type"] = request.get("media_type", "image")
             write_json(directory / "status.json", state)
-            from .remote import start_bridge
-            try: start_bridge(directory)
+            try:
+                if local:
+                    with (directory / "worker.log").open("ab") as log:
+                        process = subprocess.Popen([sys.executable, "-m", "od_web.local_worker", "--job-dir", str(directory)],
+                            cwd=paths.ROOT_DIR, env=dict(os.environ, PYTHONUTF8="1", PYTHONUNBUFFERED="1"),
+                            stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                    write_json(directory / "process.json", {"pid": process.pid})
+                else:
+                    from .remote import start_bridge
+                    start_bridge(directory)
             except OSError as e:
                 state.update(status="failed", phase="failed", error=str(e)); write_json(directory / "status.json", state)
                 raise

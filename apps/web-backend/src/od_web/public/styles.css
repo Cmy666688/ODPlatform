@@ -1458,3 +1458,14 @@ pre.log {
   #page-video .card-heading > select { max-width:100%; width:100% }
   #page-video .data-table { min-width:310px }
 }
+
+/* 助手和视频解释共用的安全排版。 */
+.assistant-content { color:#52677a; font-size:14px; line-height:1.8; overflow-wrap:anywhere }
+.assistant-content p { margin:8px 0; white-space:normal }
+.assistant-content h4 { color:#243444; font-size:15px; margin:18px 0 8px }
+.assistant-content ul, .assistant-content ol { padding-left:24px; margin:8px 0 14px }
+.assistant-content li { margin:4px 0 }
+.assistant-content strong { font-size:inherit; color:#243444 }
+.assistant-content code { background:#edf2f3; border-radius:4px; padding:1px 4px }
+.assistant-content a { color:#147d68 }
+.assistant-turn.user .assistant-content { white-space:pre-wrap; margin-top:8px }

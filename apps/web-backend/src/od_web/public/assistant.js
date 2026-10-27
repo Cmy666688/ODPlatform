@@ -34,7 +34,9 @@
   function append(role, content) {
     const block = document.createElement("article"); block.className = `assistant-turn ${role}`;
     const label = document.createElement("strong"); label.textContent = role === "user" ? "你" : "DeepSeek";
-    const text = document.createElement("p"); text.textContent = content; block.append(label, text); conversation.append(block);
+    const text = document.createElement("div"); text.className = "assistant-content";
+    if (role === "assistant") renderAssistantText(text, content); else text.textContent = content;
+    block.append(label, text); conversation.append(block);
     block.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
   form.addEventListener("submit", async (event) => {

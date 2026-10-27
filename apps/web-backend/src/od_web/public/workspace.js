@@ -33,9 +33,12 @@
     const select = $("#video-model"), old = select.value;
     const options = '<option value="">等待该数据集模型归档完成</option>' + models.map((job) => `<option value="trained:${job.id}">${esc(job.name)}</option>`).join("");
     if (select.innerHTML !== options) { select.innerHTML = options; select.value = old; if (!select.value && models.length) select.value = `trained:${models[0].id}`; }
-    $("#video-submit").disabled = !videoUpload || !select.value || !state.overview?.hardware?.cuda_available || state.jobs.some(active);
-    if (!state.overview?.hardware?.cuda_available) $("#video-feedback").textContent = "等待远程 GPU 连接。可先上传视频或查看已有结果。";
-    else if ($("#video-feedback").textContent.startsWith("等待远程 GPU")) $("#video-feedback").textContent = "远程 GPU 已就绪，上传视频后即可检测。";
+    const local = $("#video-device").value === "local";
+    $("#video-submit").textContent = local ? "本机 CPU 检测" : "远程 GPU 检测";
+    $("#video-submit").disabled = !videoUpload || !select.value || (!local && !state.overview?.hardware?.cuda_available) || state.jobs.some(active);
+    if (local) $("#video-feedback").textContent = "使用本机 CPU 检测，无需上传权重；视频处理可能较慢。";
+    else if (!state.overview?.hardware?.cuda_available) $("#video-feedback").textContent = "等待远程 GPU 连接。可先上传视频或查看已有结果。";
+    else $("#video-feedback").textContent = "远程 GPU 已就绪，上传视频后即可检测。";
     const jobs = state.jobs.filter((job) => job.media_type === "video" && job.config?.data === state.datasetId), task = $("#video-job"), value = task.value;
     const tasks = '<option value="">请选择视频任务</option>' + jobs.map((job) => `<option value="${job.id}">${esc(job.name)} · ${esc(statusNames[job.status])}</option>`).join("");
     if (task.innerHTML !== tasks) { task.innerHTML = tasks; task.value = jobs.some((job) => job.id === value) ? value : jobs[0]?.id || ""; }
@@ -58,7 +61,7 @@
           $("#video-summary").innerHTML = `<p class="caption">${value.frames} 帧 · ${number(value.duration_seconds,1)} 秒</p><div class="table-scroll"><table class="data-table"><thead><tr><th>类别</th><th>出现帧数</th><th>同帧最多</th><th>最高置信度</th></tr></thead><tbody>${Object.entries(value.class_summary).map(([name, row]) => `<tr><td>${esc(name)}</td><td>${row.frame_occurrences}</td><td>${row.max_simultaneous}</td><td>${percent(row.max_confidence)}</td></tr>`).join("")}</tbody></table></div>`;
         } loadedVideo = id;
       }
-      const explanation = await api(`/api/jobs/${id}/explanation`); if (id === $("#video-job").value) $("#video-explanation").textContent = explanation.answer || explanation.error || (explanation.status === "running" ? "DeepSeek 正在解释…" : "可点击生成视频解释。");
+      const explanation = await api(`/api/jobs/${id}/explanation`); if (id === $("#video-job").value) renderAssistantText($("#video-explanation"), explanation.answer || explanation.error || (explanation.status === "running" ? "DeepSeek 正在解释…" : "可点击生成视频解释。"));
     } catch (error) { $("#video-job-status").textContent = error.message; }
     finally { videoLoading = false; }
   }
@@ -79,11 +82,13 @@
     finally { $("#video-upload-track").hidden = true; videoControls(); }
   });
   $("#video-model").addEventListener("change", videoControls);
+  $("#video-device").addEventListener("change", videoControls);
   $("#video-submit").addEventListener("click", async () => {
     $("#video-submit").disabled = true;
     try {
-      const value = await jsonPost("/api/jobs", { kind: "inference", name: `${state.overview.dataset.name} · 视频目标检测`, upload_id: videoUpload, media_type: "video", model_id: $("#video-model").value, config: { threshold: Number($("#video-threshold").value) } });
-      await refresh(); $("#video-job").value = value.id; await videoResult(); toast("视频任务已提交远程 GPU");
+      const local = $("#video-device").value === "local";
+      const value = await jsonPost("/api/jobs", { kind: "inference", name: `${state.overview.dataset.name} · 视频目标检测`, upload_id: videoUpload, media_type: "video", model_id: $("#video-model").value, execution: local ? "local" : "remote", config: { threshold: Number($("#video-threshold").value) } });
+      await refresh(); $("#video-job").value = value.id; await videoResult(); toast(local ? "视频任务已提交本机 CPU" : "视频任务已提交远程 GPU");
     } catch (error) { toast(error.message, true); } finally { videoControls(); }
   });
   $("#video-job").addEventListener("change", () => { loadedVideo = ""; $("#video-player").hidden = true; $("#video-summary").replaceChildren(); $("#video-downloads").replaceChildren(); $("#video-explanation").textContent = "等待所选任务解释"; videoResult(); });

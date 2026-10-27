@@ -26,6 +26,7 @@ class JobRequest(BaseModel):
     upload_id: Optional[str] = None
     model_id: str = "official"
     media_type: Literal["image", "video"] = "image"
+    execution: Literal["remote", "local"] = "remote"
 
     @model_validator(mode="before")
     @classmethod

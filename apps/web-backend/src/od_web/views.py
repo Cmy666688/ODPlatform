@@ -218,10 +218,11 @@ def jobs(request):
     if request.method == "GET": return store(request).list()
     submitted = app.JobRequest(**json.loads(request.body))
     configuration = submitted.config
-    # 执行设备由服务端固定,旧草稿中的 CPU/auto 不会触发本机回退。
+    # 训练固定远程 CUDA;仅显式选择本机的 YOLO 推理允许使用 CPU。
     configuration.device = "cuda"; configuration.scan_backend = "reference"
     submitted.require_cuda = True
     if submitted.kind == "training":
+        if submitted.execution != "remote": raise ApiError(422, "训练仅支持远程 GPU")
         if configuration.backend == "yolo" and submitted.min_f1 is not None:
             raise ApiError(422, "目标检测使用 mAP 与类别指标评审,不套用分割 F1 目标")
         if configuration.max_train_batches is not None or configuration.max_eval_batches is not None:
@@ -257,8 +258,10 @@ def jobs(request):
         if not checkpoint.is_file(): raise ApiError(409, "所选模型权重尚未就绪")
         if submitted.model_id.startswith("trained:") and trained["config"].get("backend") == "yolo":
             configuration = DetectionConfig(model=str(checkpoint), data=data, threshold=configuration.threshold,
-                                            imgsz=trained["config"]["imgsz"], architecture=trained["config"].get("architecture", "yolov8n.pt"))
+                                            imgsz=trained["config"]["imgsz"], architecture=trained["config"].get("architecture", "yolov8n.pt"),
+                                            device="cpu" if submitted.execution == "local" else "cuda")
         else:
+            if submitted.execution == "local": raise ApiError(422, "本机 CPU 仅支持 YOLO 目标检测")
             if submitted.media_type == "video": raise ApiError(422, "视频仅支持已训练的目标检测模型")
             configuration = load_mixercseg_config("mixercseg_infer", {"model": str(checkpoint), "hog_bins": bins,
                          "data": data, "threshold": configuration.threshold, "device": "cuda",
@@ -266,10 +269,11 @@ def jobs(request):
         if submitted.media_type == "video":
             from od_platform.common.video import inspect_video
             inspect_video(source)
-        document = {"kind": "inference", "name": submitted.name, "config": configuration.model_dump(), "source": str(source), "media_type": submitted.media_type}
-    hardware = app._hardware()
-    if not hardware["cuda_available"]:
-        raise ApiError(409, hardware.get("message", "远程 GPU 尚未就绪,任务未启动"))
+        document = {"kind": "inference", "name": submitted.name, "config": configuration.model_dump(), "source": str(source), "media_type": submitted.media_type, "execution": submitted.execution}
+    if submitted.execution == "remote":
+        hardware = app._hardware()
+        if not hardware["cuda_available"]:
+            raise ApiError(409, hardware.get("message", "远程 GPU 尚未就绪,任务未启动"))
     return JsonResponse(store(request).create(document), status=202)
 
 

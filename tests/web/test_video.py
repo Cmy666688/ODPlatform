@@ -37,6 +37,23 @@ def test_video_upload_and_gpu_admission_without_local_fallback(web, monkeypatch)
     assert client.post("/api/jobs", json={**payload,"upload_id": "../" + value.json()["id"]}).status_code == 422
 
 
+def test_explicit_local_cpu_inference_does_not_require_remote_gpu(web, monkeypatch):
+    from od_web import app
+    client, store, root = web
+    source = clip(root / "local.mp4")
+    upload = client.post("/api/uploads/video", files={"file": (source.name, source.read_bytes(), "video/mp4")}).json()
+    identifier = "5" * 32; folder = store.root / identifier; folder.mkdir()
+    weight = root / "best.pt"; weight.write_bytes(b"test weights")
+    (folder / "status.json").write_text(json.dumps({"id": identifier, "kind": "training", "status": "completed",
+        "config": {"backend": "yolo", "data": "wsodd", "imgsz": 960, "architecture": "yolov8s.pt"}, "best_weight": str(weight)}))
+    monkeypatch.setattr(app, "_hardware", lambda: pytest.fail("CPU 推理不应检查远程 GPU"))
+    documents = []; monkeypatch.setattr(store, "create", lambda row: documents.append(row) or {"id": "b" * 32})
+    payload = {"kind": "inference", "media_type": "video", "upload_id": upload["id"], "model_id": "trained:" + identifier, "execution": "local"}
+    assert client.post("/api/jobs", json=payload).status_code == 202
+    assert documents[0]["config"]["device"] == "cpu" and documents[0]["execution"] == "local"
+    assert client.post("/api/jobs", json={"kind": "training", "execution": "local"}).status_code == 422
+
+
 def test_video_rejects_invalid_input_and_protects_csrf(web):
     client, _, root = web
     assert client.post("/api/uploads/video", files={"file": ("bad.mp4", b"invalid")}).status_code == 422
@@ -75,6 +92,15 @@ def test_video_pipeline_outputs_playable_artifacts_and_honest_counts(web, monkey
     assert not (failed_run / "annotated.raw.mp4").exists() and not (failed_run / ".active.json").exists()
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     with pytest.raises(RuntimeError, match="CUDA"): infer_video(DetectionConfig(model=str(weight)), str(source), state.update, lambda: False, model_factory=FakeModel)
+    class CpuModel(FakeModel):
+        def predict(self, **kwargs):
+            assert kwargs["device"] == "cpu"
+            image = np.full((64,64,3), 128, dtype=np.uint8)
+            for _ in range(10):
+                yield SimpleNamespace(orig_shape=(64,64), plot=lambda: image, summary=lambda: [])
+    assert infer_video(DetectionConfig(model=str(weight), device="cpu"), str(source), state.update, lambda: False, model_factory=CpuModel) == 0
+    audit = json.loads((root / state["run_dir"] / "odp_audit.json").read_text(encoding="utf-8"))
+    assert audit["resolved_device"] == "cpu"
 
 
 def test_video_range_download_and_explanation_use_summary_only(web, monkeypatch):

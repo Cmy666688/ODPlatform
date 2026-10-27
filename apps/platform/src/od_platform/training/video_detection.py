@@ -14,7 +14,7 @@ from od_platform.common.video import inspect_video
 
 def infer_video(config, source, update, cancelled, *, model_factory=None) -> int:
     import torch
-    if config.device != "cuda" or not torch.cuda.is_available(): raise RuntimeError("视频模型推理必须使用远程 CUDA GPU")
+    if config.device not in ("cpu", "cuda") or (config.device == "cuda" and not torch.cuda.is_available()): raise RuntimeError("远程 CUDA GPU 未就绪")
     from ultralytics import YOLO
     from imageio_ffmpeg import get_ffmpeg_exe
     from od_platform.training.detection_experiment import now
@@ -27,7 +27,7 @@ def infer_video(config, source, update, cancelled, *, model_factory=None) -> int
         results = None
         try:
             model = (model_factory or YOLO)(config.model)
-            results = model.predict(source=source, stream=True, device=0, imgsz=config.imgsz, conf=config.threshold, iou=config.iou, max_det=100, verbose=False)
+            results = model.predict(source=source, stream=True, device="cpu" if config.device == "cpu" else 0, imgsz=config.imgsz, conf=config.threshold, iou=config.iou, max_det=100, verbose=False)
             with (context.run_dir / "frames.jsonl").open("w", encoding="utf-8") as stream:
                 for result in results:
                     if cancelled(): raise InterruptedError("已请求停止视频推理")
@@ -62,7 +62,7 @@ def infer_video(config, source, update, cancelled, *, model_factory=None) -> int
                        "class_summary": classes, "sampled_frames": samples, "threshold": config.threshold, "max_detections_per_frame": 100,
                        "note": "逐帧出现次数不代表独立目标数,没有跟踪 ID;无标注视频不能计算准确率,不能据此推断航速或碰撞风险"}
             write_json(context.run_dir / "video_summary.json", summary)
-            write_json(context.run_dir / "odp_audit.json", {"config": config.model_dump(), "resolved_device": "cuda", "media_type": "video",
+            write_json(context.run_dir / "odp_audit.json", {"config": config.model_dump(), "resolved_device": config.device, "media_type": "video",
                                                          "checkpoint_sha256": file_sha256(Path(config.model)), "source_sha256": file_sha256(Path(source))})
             update({"status": "completed", "phase": "completed", "progress": 1, "finished_at": now(), "eta_seconds": 0})
         finally:

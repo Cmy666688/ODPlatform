@@ -139,7 +139,8 @@ def run(job_dir: Path) -> int:
     state = {"id": job_dir.name, "kind": request["kind"], "name": request["name"], "status": "running", "phase": "starting",
              "pid": __import__("os").getpid(), "created_at": request["created_at"], "started_at": now(), "config": config.model_dump(),
              "history": [], "progress": 0, "dataset_name": request.get("dataset_name", "WSODD"),
-             "dataset_counts": request.get("dataset_counts"), "dataset_fingerprint": request.get("dataset_fingerprint"), "task": "detect"}
+             "dataset_counts": request.get("dataset_counts"), "dataset_fingerprint": request.get("dataset_fingerprint"), "task": "detect",
+             "execution": "local", "media_type": request.get("media_type", "image")}
     start = time.perf_counter()
     def cancelled(): return (job_dir / "cancel.request").exists()
     def update(event):
@@ -147,7 +148,9 @@ def run(job_dir: Path) -> int:
         if 0 < state["progress"] < 1: state["eta_seconds"] = state["elapsed_seconds"]*(1-state["progress"])/state["progress"]
         write_json(job_dir / "status.json", state)
     try:
-        if config.device != "cuda" or not torch.cuda.is_available(): raise RuntimeError("检测实验必须在远程 CUDA GPU 执行")
+        if config.device == "cpu":
+            if request["kind"] != "inference" or request.get("execution") != "local": raise RuntimeError("本机 CPU 仅支持显式选择的 YOLO 推理")
+        elif config.device != "cuda" or not torch.cuda.is_available(): raise RuntimeError("检测实验必须在远程 CUDA GPU 执行")
         torch.set_num_threads(config.torch_threads); update({})
         if request["kind"] == "inference": return infer(config, request["source"], job_dir, state, update, cancelled)
         report = validate(paths.dataset_yaml_path(config.data))
@@ -209,9 +212,9 @@ def infer(config, source, job_dir, state, update, cancelled) -> int:
     from ultralytics import YOLO
     if cancelled(): raise InterruptedError("已请求停止推理")
     with RunContext("detection_infer") as context:
-        result = YOLO(config.model).predict(source=source, device=0, imgsz=config.imgsz, conf=config.threshold, iou=config.iou, verbose=False)[0]
+        result = YOLO(config.model).predict(source=source, device="cpu" if config.device == "cpu" else 0, imgsz=config.imgsz, conf=config.threshold, iou=config.iou, verbose=False)[0]
         write_png(context.run_dir / "comparisons" / (Path(source).stem + ".png"), result.plot())
         write_json(context.run_dir / "predictions.json", {"names": result.names, "detections": result.summary()})
-        write_json(context.run_dir / "odp_audit.json", {"config": config.model_dump(), "resolved_device": "cuda", "checkpoint_sha256": file_sha256(Path(config.model))})
+        write_json(context.run_dir / "odp_audit.json", {"config": config.model_dump(), "resolved_device": config.device, "checkpoint_sha256": file_sha256(Path(config.model))})
         update({"status": "completed", "phase": "completed", "progress": 1, "run_dir": context.run_dir.relative_to(paths.ROOT_DIR).as_posix(), "finished_at": now(), "eta_seconds": 0})
     return 0

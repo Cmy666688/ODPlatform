@@ -91,7 +91,7 @@ def test_assistant_http_chat_keeps_user_context_and_rejects_unknown_fields(web, 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-only-test")
     def post(url, **kwargs):
         evidence = kwargs["json"]["messages"][0]["content"]
-        assert "wsodd" in evidence and "remote GPU" in evidence
+        assert "wsodd" in evidence and "CPU" in evidence and "GPU" in evidence
         return httpx.Response(200, json={"choices": [{"message": {"content": "尚未提供独立测试指标"}}]})
     monkeypatch.setattr(assistant.httpx, "post", post)
     value = client.post("/api/assistant/chat", json={"message": "验收是否完成", "dataset": "wsodd"})

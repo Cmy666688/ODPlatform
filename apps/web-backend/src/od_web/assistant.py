@@ -41,7 +41,7 @@ def status():
 
 def context(dataset, job_store, job_id=""):
     """白名单字段:不发送机器地址、磁盘路径、日志、图像或模型权重。"""
-    result = {"project": "港区水域通航目标检测", "task": "多类别目标检测", "execution": "remote GPU",
+    result = {"project": "港区水域通航目标检测", "task": "多类别目标检测", "execution": "训练使用远程 GPU；推理可选本机 CPU 或远程 GPU",
               "dataset": {key: dataset.get(key) for key in ("id", "name", "splits", "names", "fingerprint", "task")}}
     quality = dataset.get("quality") or {}
     result["quality"] = {"overall_severity": quality.get("overall_severity"),
@@ -49,6 +49,7 @@ def context(dataset, job_store, job_id=""):
                                     for row in quality.get("results", [])]}
     if job_id:
         job = job_store.read(job_id)
+        result["execution"] = "local CPU" if job.get("execution") == "local" else "remote GPU"
         if job.get("config", {}).get("data") != dataset["id"]:
             raise ValueError("请选择当前数据集对应的实验")
         result["experiment"] = {key: job.get(key) for key in ("id", "name", "kind", "status", "phase", "progress", "epoch")}

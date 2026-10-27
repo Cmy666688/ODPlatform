@@ -123,7 +123,9 @@ function renderOverview() {
   $("#training-profile-label").hidden = !detection;
   $("#recipe-summary").innerHTML = detection ? `<span>${esc(fields.architecture.value.replace("yolo", "YOLO").replace(".pt", ""))}</span><span>${fields.imgsz.value} × ${fields.imgsz.value}</span><span>AdamW</span><span>${Object.keys(data.dataset.names || {}).length} 类目标检测</span>` : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
   $("#f1-target-label").hidden = detection;
-  $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
+  const customSplit = monitored?.evaluation_independent === false && monitored.config?.data === state.datasetId && monitored.dataset_counts;
+  const shownSplit = customSplit || split;
+  $("#dataset-counts").textContent = `${shownSplit.train + shownSplit.val + shownSplit.test} 张图像　·　${shownSplit.train} 训练 / ${shownSplit.val} 验证 / ${shownSplit.test} 测试${customSplit ? " · 本次实验划分" : ""}`;
   $("#device-name").textContent = hardware.connected ? hardware.device : "远程 GPU 未连接";
   $("#device-note").textContent = `远程 GPU · PyTorch ${hardware.torch} · ${hardware.connected ? "实时采样" : "等待连接"}`;
   $("#gpu-badge").textContent = hardware.cuda_available ? "远程 GPU 就绪" : "等待远程 GPU";
@@ -159,7 +161,10 @@ function renderOverview() {
   const modelValue = $("#infer-model").value;
   const models = (detection ? '<option value="">训练完成后选择该数据集权重</option>' : '<option value="official">官方 CrackMap 参考权重</option>') + completed.filter((job) => job.kind === "training").map((job) => `<option value="trained:${job.id}">${esc(job.name)} · best</option>`).join("");
   if ($("#infer-model").innerHTML !== models) { $("#infer-model").innerHTML = models; $("#infer-model").value = modelValue; if (!$("#infer-model").value && completed.some((job) => job.kind === "training")) $("#infer-model").value = `trained:${completed.find((job) => job.kind === "training").id}`; }
-  $("#run-inference").disabled = !hardware.cuda_available || !state.uploadId || !$("#infer-model").value || state.jobs.some(active);
+  $("#infer-device-label").hidden = !detection;
+  const localInference = detection && $("#infer-device").value === "local";
+  $("#run-inference").textContent = localInference ? "本机 CPU 推理" : "远程 GPU 推理";
+  $("#run-inference").disabled = (!localInference && !hardware.cuda_available) || !state.uploadId || !$("#infer-model").value || state.jobs.some(active);
   const inferJob = state.jobs.find((job) => job.id === state.inferId);
   if (inferJob) {
     $("#infer-feedback").textContent = `${statusNames[inferJob.status]}${inferJob.error ? " · " + inferJob.error : ""}`;
@@ -172,9 +177,11 @@ function renderOverview() {
 
 function renderMonitor() {
   const job = state.jobs.find((row) => row.id === state.monitorId);
+  const nonIndependent = job?.evaluation_independent === false;
   const history = job?.history || [], last = history.at(-1), epochs = job?.config?.epochs || state.draft?.config?.epochs || state.defaults?.epochs || 50;
   $("#step-train-count").textContent = `${epochs} epochs`;
   $("#step-test-count").textContent = job?.dataset_counts?.test ? `${job.dataset_counts.test} 张测试图` : "所选数据集的独立测试集";
+  $("#step-test-label").textContent = nonIndependent ? "对照评估" : "独立测试";
   $("#training-name").textContent = job?.name || "等待新实验";
   $("#training-status").outerHTML = `<span id="training-status" class="badge ${job ? job.status === "completed" ? "success" : job.status === "failed" ? "danger" : "neutral" : "neutral"}">${job ? esc(statusText(job)) : "待训练"}</span>`;
   $("#training-dot").classList.toggle("running", Boolean(job && active(job) && job.phase !== "syncing"));
@@ -182,8 +189,8 @@ function renderMonitor() {
   $("#metric-loss").textContent = number(last?.train_loss);
   const detection = (job?.config?.backend || state.defaults?.backend) === "yolo";
   const tested = detection && Number.isFinite(job?.metrics?.mAP50);
-  $("#metric-score-label").textContent = tested ? "独立测试 mAP50" : detection ? "最近一轮验证 mAP50–95" : "最近一轮验证 F1";
-  $("#metric-score-note").textContent = tested ? "验证集选出的最佳权重 · 完整测试集" : detection ? "检测框 IoU 0.50–0.95 · 测试指标见结果页" : "固定阈值 0.5 · 测试指标见结果页";
+  $("#metric-score-label").textContent = tested ? nonIndependent ? "同源对照 mAP50" : "独立测试 mAP50" : detection ? "最近一轮验证 mAP50–95" : "最近一轮验证 F1";
+  $("#metric-score-note").textContent = tested ? nonIndependent ? `${job.dataset_counts?.test || "部分"} 张测试图与训练集采集组重叠 · 非独立验收` : "验证集选出的最佳权重 · 完整测试集" : detection ? "检测框 IoU 0.50–0.95 · 测试指标见结果页" : "固定阈值 0.5 · 测试指标见结果页";
   $("#metric-f1").textContent = percent(tested ? job.metrics.mAP50 : detection ? last?.validation?.mAP50_95 : last?.validation?.F1);
   $("#metric-time").textContent = duration(job?.elapsed_seconds);
   $("#metric-eta").textContent = job?.status === "completed" ? "实验已结束" : job?.phase === "syncing" ? "训练与测试已结束，产物回传中" : job?.eta_seconds ? `预计剩余 ${duration(job.eta_seconds)}` : "启动后显示预计剩余时间";
@@ -203,14 +210,22 @@ function renderMonitor() {
 
 function renderQuality(quality) {
   const checks = quality?.results || [], warning = checks.filter((row) => row.severity === "WARNING"), errors = checks.filter((row) => row.severity === "ERROR");
-  const severity = quality?.overall_severity || "未检查";
-  $("#quality-badge").textContent = errors.length ? "需修复" : warning.length ? "风险提示" : quality ? "通过" : "未检查";
-  $("#quality-badge").className = `badge ${errors.length ? "danger" : warning.length ? "warning" : "success"}`;
-  $("#quality-summary").innerHTML = quality ? `<div class="summary-line"><strong>${checks.length - warning.length - errors.length}</strong> 项检查通过 / ${checks.length} 项</div><div class="summary-copy ${warning.length ? "risk" : ""}">${errors.length ? "存在错误，需处理后训练。" : warning.length ? "存在数据划分或类别覆盖限制，详见质检报告。" : "未发现阻断问题。"}</div>` : empty("暂无质检记录", "前往数据页运行检查。");
-  $("#data-dot").hidden = !warning.length && !errors.length;
+  const reviewedOnly = warning.length > 0 && warning.every((row) => ["detection_eval_coverage", "detection_split_policy"].includes(row.name));
+  const severity = quality ? errors.length ? "需修复" : warning.length && !reviewedOnly ? "风险提示" : "通过（检查完成）" : "未检查";
+  $("#quality-badge").textContent = quality ? errors.length ? "需修复" : warning.length && !reviewedOnly ? "风险提示" : "通过" : "未检查";
+  $("#quality-badge").className = `badge ${errors.length ? "danger" : warning.length && !reviewedOnly ? "warning" : "success"}`;
+  $("#quality-summary").innerHTML = quality ? `<div class="summary-line"><strong>${checks.length}</strong> 项检查已完成 · ${checks.length - warning.length - errors.length} 项通过${warning.length ? ` · ${warning.length} 项存在限制` : ""}</div><div class="summary-copy ${warning.length ? "risk" : ""}">${errors.length ? "存在错误，需处理后训练。" : warning.length ? "检查流程已完成；数据划分或类别覆盖限制仍然存在，详见质检报告。" : "未发现阻断问题。"}</div>` : empty("暂无质检记录", "前往数据页运行检查。");
+  $("#data-dot").hidden = !errors.length && (!warning.length || reviewedOnly);
   const split = state.overview.dataset.splits;
   $("#data-metrics").innerHTML = [["训练集", split.train, "用于模型参数学习"], ["验证集", split.val, "用于选择 best 权重"], ["测试集", split.test, "独立效果验收"], ["质检结果", severity, `${checks.length} 项数据检查`]].map(([label, value, note]) => `<article class="metric-card"><span>${label}</span><strong>${esc(value)}</strong><div>${note}</div></article>`).join("");
-  $("#quality-checks").innerHTML = checks.length ? checks.map((row) => `<div class="check-row"><div><strong>${esc(checkNames[row.name] || row.name)}</strong><p>${esc(row.summary)}</p></div>${badge({ PASS: "通过", INFO: "信息", WARNING: "风险提示", ERROR: "错误" }[row.severity], row.severity === "ERROR" ? "danger" : row.severity === "WARNING" ? "warning" : "success")}</div>`).join("") : empty("尚未检查", "点击重新质检检查当前数据集。");
+  $("#quality-checks").innerHTML = checks.length ? checks.map((row) => {
+    const reviewed = row.severity === "WARNING" && ["detection_eval_coverage", "detection_split_policy"].includes(row.name);
+    const missing = row.name === "detection_eval_coverage" ? row.details?.missing : null;
+    const detail = missing ? [["验证集", missing.val], ["测试集", missing.test]].filter(([, names]) => names?.length).map(([name, names]) => `${name}缺少 ${names.join("、")}`).join("；") : "";
+    const label = reviewed ? "通过" : { PASS: "通过", INFO: "信息", WARNING: "风险提示", ERROR: "错误" }[row.severity];
+    const style = reviewed ? "success" : row.severity === "ERROR" ? "danger" : row.severity === "WARNING" ? "warning" : "success";
+    return `<div class="check-row"><div><strong>${esc(checkNames[row.name] || row.name)}</strong><p>${reviewed ? "检查流程已完成；仍有以下限制：" : ""}${esc(row.summary)}${detail ? ` · ${esc(detail)}` : ""}</p></div>${badge(label, style)}</div>`;
+  }).join("") : empty("尚未检查", "点击重新质检检查当前数据集。");
   const groups = checks.find((row) => row.name === "mask_source_group_overlap")?.details?.groups || {};
   $("#source-groups").innerHTML = Object.entries(groups).map(([name, splits]) => `<span>${esc(name)} · ${esc(splits.join(" / "))}</span>`).join("") || '<span>无分组风险记录</span>';
 }
@@ -226,7 +241,8 @@ async function loadQualityHistory() {
   $("#quality-progress-label").textContent = running ? `${current.completed} / ${current.total} 个样本` : current.status === "failed" ? current.error : `${history.length} 次记录`;
   $("#quality-history").innerHTML = history.length ? history.slice(0, 20).map((row) => {
     const changes = row.comparison || {}, summary = changes.baseline ? [["新增问题", changes.introduced], ["已修复", changes.resolved], ["结果变化", changes.changed], ["检查项移除", changes.removed_checks]].map(([label, values]) => `${label} ${values?.length || 0}${values?.length ? `（${values.map((name) => checkNames[name] || name).join("、")}）` : ""}`).join(" · ") : "首次留档，后续质检将与本次比较";
-    return `<div class="check-row"><div><strong>${esc(row.checked_at ? new Date(row.checked_at).toLocaleString("zh-CN") : "原始基线")}</strong><p>${esc(summary)}</p><small class="caption">${esc(row.report_id)}</small></div>${badge(row.overall_severity, row.overall_severity === "ERROR" ? "danger" : row.overall_severity === "WARNING" ? "warning" : "success")}</div>`;
+    const label = { PASS: "通过", WARNING: "存在限制", ERROR: "错误" }[row.overall_severity] || row.overall_severity;
+    return `<div class="check-row"><div><strong>${esc(row.checked_at ? new Date(row.checked_at).toLocaleString("zh-CN") : "原始基线")}</strong><p>${esc(summary)}</p><small class="caption">${esc(row.report_id)}</small></div>${badge(label, row.overall_severity === "ERROR" ? "danger" : row.overall_severity === "WARNING" ? "warning" : "success")}</div>`;
   }).join("") : empty("暂无历史快照", "重新质检后开始保留每次记录。");
 }
 
@@ -252,7 +268,7 @@ async function showDetail(id, navigate = true) {
   state.detailId = id;
   const job = state.jobs.find((row) => row.id === id) || await api(`/api/jobs/${id}`);
   const container = $("#job-detail"); container.hidden = false;
-  container.innerHTML = `<div class="card-heading"><h2>${esc(job.name)}</h2>${statusBadge(job)}</div><div class="detail-grid"><div>任务 ID<strong>${esc(job.id.slice(0, 12))}</strong></div><div>当前阶段<strong>${esc(phaseNames[job.phase] || job.phase)}</strong></div><div>运行时长<strong>${duration(job.elapsed_seconds)}</strong></div></div>${job.error ? `<p class="environment-message">${esc(job.error)}</p>` : ""}<div class="detail-actions"><button class="button secondary" data-log="${id}">查看日志</button>${job.kind === "training" ? `<button class="button secondary" data-monitor="${id}">监控此实验</button>` : ""}${active(job) ? `<button class="button secondary" data-cancel="${id}" ${job.cancel_requested ? "disabled" : ""}>${job.cancel_requested ? "已请求停止" : "停止任务"}</button>` : ""}${job.status === "completed" ? `<button class="button primary" data-results="${id}">查看结果</button>` : ""}</div><div id="job-log"></div>`;
+  container.innerHTML = `<div class="card-heading"><h2>${esc(job.name)}</h2>${statusBadge(job)}</div><div class="detail-grid"><div>任务 ID<strong>${esc(job.id.slice(0, 12))}</strong></div><div>当前阶段<strong>${esc(phaseNames[job.phase] || job.phase)}</strong></div><div>运行时长<strong>${duration(job.elapsed_seconds)}</strong></div></div>${job.error ? `<p class="environment-message">${esc(job.error)}</p>` : ""}${job.evaluation_independent === false ? `<p class="environment-message">原验证集和测试集各 95% 纳入训练；保留样本与训练集采集组重叠，评估不代表独立场景。</p>` : ""}<div class="detail-actions"><button class="button secondary" data-log="${id}">查看日志</button>${job.kind === "training" ? `<button class="button secondary" data-monitor="${id}">监控此实验</button>` : ""}${active(job) ? `<button class="button secondary" data-cancel="${id}" ${job.cancel_requested ? "disabled" : ""}>${job.cancel_requested ? "已请求停止" : "停止任务"}</button>` : ""}${job.status === "completed" ? `<button class="button primary" data-results="${id}">查看结果</button>` : ""}</div><div id="job-log"></div>`;
   $("#job-log").innerHTML = previousLog;
   if (navigate) location.hash = "experiments";
 }
@@ -270,7 +286,7 @@ async function loadGallery(selected) {
     const job = state.jobs.find((row) => row.id === source);
     const detection = job?.config?.backend === "yolo";
     $("#result-panel-label").textContent = detection ? "标注框 GT · 预测框" : "原图 · GT · 预测 · 误差";
-    $("#gallery-description").textContent = job?.kind === "training" ? `${job.dataset_name || job.config?.data} 最佳权重 · 独立 test 验收${detection ? " · 展示最多 48 张对比图" : ""}` : detection ? "图片推理结果 · 水面目标与置信度" : "历史分割推理结果";
+    $("#gallery-description").textContent = job?.kind === "training" ? job.evaluation_independent === false ? `${job.dataset_name || job.config?.data} 最佳权重 · ${job.dataset_counts?.test || "部分"} 张测试图与训练集采集组重叠 · 非独立验收` : `${job.dataset_name || job.config?.data} 最佳权重 · 独立 test 验收${detection ? " · 展示最多 48 张对比图" : ""}` : detection ? "图片推理结果 · 水面目标与置信度" : "历史分割推理结果";
     if (job?.metrics) $("#evaluation-metrics").innerHTML = (detection ? [["mAP50", job.metrics.mAP50], ["mAP50–95", job.metrics.mAP50_95], ["精确率", job.metrics.precision], ["召回率", job.metrics.recall]] : [["F1", job.metrics.F1], ["前景 IoU", job.metrics.foreground_IoU], ["mIoU", job.metrics.mIoU], ["精确率", job.metrics.precision], ["召回率", job.metrics.recall]]).map(([label, value]) => `<div>${label}<strong>${percent(value)}</strong></div>`).join("");
     $("#result-downloads").innerHTML = artifacts.filter((entry) => ["report.json", "report.md", "per_image.csv", "per_class.csv", "training_curves.png", "best.pth", "best.pt", "confusion_matrix.png", "BoxPR_curve.png"].includes(entry.name)).map((entry) => `<a href="${artifactUrl(entry.url)}?download=true" download>${esc(entry.name)} ↓</a>`).join("");
     if (job?.kind === "training" && job.quality_status === "needs_review") $("#gallery-description").textContent += " · 未设精度目标，效果待人工评审";
@@ -299,7 +315,8 @@ async function uploadImage(file) {
     const form = new FormData(); form.append("file", file);
     const data = await api("/api/uploads", { method: "POST", body: form }); state.uploadId = data.id;
     $("#upload-description").textContent = `${file.name} · ${data.width} × ${data.height}`;
-    $("#run-inference").disabled = !state.overview.hardware.cuda_available || !$("#infer-model").value || state.jobs.some(active);
+    const localInference = state.overview.dataset.task === "detect" && $("#infer-device").value === "local";
+    $("#run-inference").disabled = (!localInference && !state.overview.hardware.cuda_available) || !$("#infer-model").value || state.jobs.some(active);
   } catch (error) { state.uploadId = null; $("#upload-description").textContent = "上传失败，请重新选择图片"; $("#run-inference").disabled = true; toast(error.message, true); }
 }
 
@@ -394,10 +411,11 @@ $("#upload-zone").addEventListener("dragover", (event) => { event.preventDefault
 $("#upload-zone").addEventListener("dragleave", () => $("#upload-zone").classList.remove("dragging"));
 $("#upload-zone").addEventListener("drop", (event) => { event.preventDefault(); $("#upload-zone").classList.remove("dragging"); uploadImage(event.dataTransfer.files[0]); });
 $("#infer-threshold").addEventListener("input", (event) => { $("#threshold-value").textContent = Number(event.target.value).toFixed(2); });
+$("#infer-device").addEventListener("change", renderOverview);
 $("#run-inference").addEventListener("click", async () => {
   $("#run-inference").disabled = true;
   try {
-    const request = { kind: "inference", name: state.overview.dataset.task === "detect" ? `${state.overview.dataset.name} · 目标检测` : "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, config: { threshold: Number($("#infer-threshold").value) } };
+    const request = { kind: "inference", name: state.overview.dataset.task === "detect" ? `${state.overview.dataset.name} · 目标检测` : "单图裂缝分割", upload_id: state.uploadId, model_id: $("#infer-model").value, execution: state.overview.dataset.task === "detect" ? $("#infer-device").value : "remote", config: { threshold: Number($("#infer-threshold").value) } };
     const job = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
     state.inferId = job.id; $("#infer-feedback").textContent = "推理任务已提交…"; await refresh(); toast("正在生成检测或分割结果");
   } catch (error) { toast(error.message, true); renderOverview(); }
