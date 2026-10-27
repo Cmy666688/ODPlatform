@@ -10,6 +10,7 @@ const phaseNames = { queued: "排队中", uploading: "上传到远程 GPU", vali
 const checkNames = { mask_pair_existence: "图像与掩膜配对", mask_decode_and_format: "解码与标注格式", mask_dimensions: "图像与掩膜尺寸", mask_alpha_channels: "Alpha 通道处理", mask_foreground_coverage: "前景覆盖率", mask_split_uniqueness: "跨集合像素重复", mask_source_group_overlap: "同源分组风险", mask_manifest_lineage: "图像与掩膜身份" };
 Object.assign(checkNames, { detection_pairing: "图像与检测标签配对", detection_boxes: "尺寸、类别与检测框", detection_decode: "原图完整解码", detection_groups: "采集序列独立划分", detection_duplicates: "跨集合重复图像", detection_identity: "图像、标签与划分身份", detection_train_coverage: "训练类别覆盖", detection_eval_coverage: "独立验收类别覆盖", detection_split_policy: "划分依据与限制" });
 phaseNames.visualizing = "生成检测对比图";
+phaseNames.staging = "准备独立训练副本";
 const active = (job) => ["queued", "running", "cancelling"].includes(job.status);
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const number = (value, places = 4) => Number.isFinite(value) ? value.toFixed(places) : "—";
@@ -115,7 +116,9 @@ function renderOverview() {
   const detection = data.dataset.task === "detect";
   if (!state.uploadId) $("#upload-description").textContent = detection ? `使用 ${data.dataset.name} 最佳权重查看 ${Object.keys(data.dataset.names || {}).length} 类目标` : "使用所选训练权重查看结果";
   $("#dataset-task").textContent = detection ? `${Object.keys(data.dataset.names || {}).length} 类目标检测` : "二值语义分割";
-  $("#recipe-summary").innerHTML = detection ? `<span>YOLOv8n</span><span>640 × 640</span><span>AdamW</span><span>${Object.keys(data.dataset.names || {}).length} 类目标检测</span>` : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
+  const fields = $("#training-form").elements;
+  $("#detection-options").hidden = !detection;
+  $("#recipe-summary").innerHTML = detection ? `<span>${esc(fields.architecture.value.replace("yolo", "YOLO").replace(".pt", ""))}</span><span>${fields.imgsz.value} × ${fields.imgsz.value}</span><span>AdamW</span><span>${Object.keys(data.dataset.names || {}).length} 类目标检测</span>` : '<span>MixerCSeg</span><span>512 × 512</span><span>BCE + Dice</span>';
   $("#f1-target-label").hidden = detection;
   $("#dataset-counts").textContent = `${split.train + split.val + split.test} 张图像　·　${split.train} 训练 / ${split.val} 验证 / ${split.test} 测试`;
   $("#device-name").textContent = hardware.connected ? hardware.device : "远程 GPU 未连接";
@@ -297,7 +300,8 @@ async function uploadImage(file) {
 
 function draft() {
   const values = new FormData($("#training-form"));
-  return { name: values.get("name"), config: { ...state.defaults, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: state.defaults.backend === "yolo" || values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
+  const model = state.defaults.backend === "yolo" ? { architecture: values.get("architecture"), imgsz: Number(values.get("imgsz")) } : {};
+  return { name: values.get("name"), config: { ...state.defaults, ...model, data: values.get("data"), device: "cuda", scan_backend: "reference", epochs: Number(values.get("epochs")), batch_size_train: Number(values.get("batch_size_train")), lr: Number(values.get("lr")), seed: Number(values.get("seed")) }, require_cuda: true, min_f1: state.defaults.backend === "yolo" || values.get("min_f1") === "" ? null : Number(values.get("min_f1")) };
 }
 
 function openConfig() {
@@ -315,6 +319,7 @@ function openConfig() {
   }
   if (!saved || saved.config.data !== state.datasetId) $("#training-form").elements.name.value = `${state.overview.dataset.name} 完整实验`;
   $("#training-dataset").value = state.datasetId;
+  for (const field of ["architecture", "imgsz"]) $("#training-form").elements[field].value = (saved?.config || state.defaults)[field] || (field === "architecture" ? "yolov8n.pt" : 640);
   renderOverview();
   $("#config-dialog").showModal();
 }
@@ -341,6 +346,7 @@ $("#refresh").addEventListener("click", () => refresh());
 $("#active-dataset").addEventListener("change", (event) => selectDataset(event.target.value));
 $("#training-dataset").addEventListener("change", (event) => selectDataset(event.target.value));
 $("#training-device").addEventListener("change", () => renderOverview());
+for (const name of ["architecture", "imgsz"]) $("#training-form").elements[name].addEventListener("change", renderOverview);
 $("#monitor-job").addEventListener("change", (event) => { state.monitorId = event.target.value; state.monitorChosen = true; renderOverview(); });
 $("#close-config").addEventListener("click", () => $("#config-dialog").close());
 $("#save-draft").addEventListener("click", () => { if (!$("#training-form").reportValidity()) return; state.draft = draft(); localStorage.setItem("odp-training-draft", JSON.stringify(state.draft)); $("#config-dialog").close(); renderMonitor(); toast("训练配置已保存，未启动训练"); });

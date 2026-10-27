@@ -133,6 +133,8 @@ def unpack(job_id):
     directory = JobStore().directory(job_id)
     request = json.loads((directory / "request.json").read_text(encoding="utf-8"))
     identifier = request["config"]["data"]
+    from od_platform.runtime_config.detection import DetectionConfig
+    architecture = DetectionConfig(**request["config"]).architecture
     if request["config"].get("backend") != "yolo" or not re.fullmatch(r"wsodd|ds_[0-9a-f]{16}", identifier):
         raise ValueError("非法目标检测数据集 ID")
     size = 0; seen = set()
@@ -143,7 +145,7 @@ def unpack(job_id):
             size += member.size
             if relative in seen or len(seen) >= MAX_FILES + 3 or size > MAX_EXPANDED: raise ValueError("检测数据包重复或超过限制")
             seen.add(relative)
-            if not (relative.as_posix().startswith(f"data/processed/{identifier}/") or relative.as_posix() in (f"apps/platform/configs/datasets/{identifier}.yaml", "models/pretrained/yolov8n.pt")):
+            if not (relative.as_posix().startswith(f"data/processed/{identifier}/") or relative.as_posix() in (f"apps/platform/configs/datasets/{identifier}.yaml", f"models/pretrained/{architecture}")):
                 raise ValueError("检测数据包路径不被允许")
             target = paths.ROOT_DIR / relative
             target.parent.mkdir(parents=True, exist_ok=True)

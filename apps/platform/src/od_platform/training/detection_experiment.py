@@ -154,6 +154,8 @@ def run(job_dir: Path) -> int:
         if report["overall_severity"] == "ERROR" or report["data_fingerprint"] != request["dataset_fingerprint"]: raise ValueError("检测数据质检或身份不通过")
         with RunContext("training") as context:
             original, data_yaml, document, root = dataset_file(config.data, job_dir)
+            from .detection_data import stage_dataset
+            data_yaml, data_audit = stage_dataset(document, root, job_dir, update)
             update({"run_dir": context.run_dir.relative_to(paths.ROOT_DIR).as_posix(), "phase": "training"})
             pretrained = paths.PRETRAINED_MODELS_DIR / config.architecture
             model = YOLO(str(pretrained) if pretrained.is_file() else config.architecture)
@@ -173,8 +175,10 @@ def run(job_dir: Path) -> int:
                 update({"epoch": trainer.epoch+1, "phase": "training", "progress": 0.94*(trainer.epoch+1)/config.epochs})
             model.add_callback("on_train_batch_end", batch_end); model.add_callback("on_fit_epoch_end", epoch_end)
             recipe = YOLOTrainConfig(task="detect", model=config.architecture, data=str(data_yaml), device="0", epochs=config.epochs,
-                                     batch=config.batch_size_train, imgsz=config.imgsz, lr0=config.lr, optimizer="AdamW",
+                                     batch=config.batch_size_train, imgsz=config.imgsz, lr0=config.lr, optimizer=config.optimizer,
                                      weight_decay=config.weight_decay, seed=config.seed, workers=config.num_threads, patience=0,
+                                     cos_lr=config.cos_lr, warmup_bias_lr=config.warmup_bias_lr, mosaic=config.mosaic,
+                                     scale=config.scale, hsv_s=config.hsv_s, close_mosaic=min(config.close_mosaic, config.epochs),
                                      deterministic=True, amp=True, plots=True, save=True, pretrained=True)
             kwargs = recipe.to_ultralytics_kwargs(); kwargs.pop("model", None)
             kwargs.update(project=str(context.run_dir.parent), name=context.run_id, exist_ok=True)
@@ -186,7 +190,8 @@ def run(job_dir: Path) -> int:
             evaluation = evaluate(config, best, data_yaml, document, root, job_dir / "evaluation", state["history"], update, cancelled)
             write_json(context.run_dir / "odp_audit.json", {"task": "detect", "config": config.model_dump(), "resolved_device": "cuda",
                        "history": state["history"], "data_fingerprint": document["data_fingerprint"], "checkpoint_sha256": file_sha256(best),
-                       "recipe": recipe.to_audit_snapshot(), "metrics": evaluation["metrics"], "best_selection": "Ultralytics validation fitness; test excluded"})
+                       "recipe": recipe.to_audit_snapshot(), "engine_data": data_audit,
+                       "metrics": evaluation["metrics"], "best_selection": "Ultralytics validation fitness; test excluded"})
             update({"status": "completed", "phase": "completed", "progress": 1, "metrics": evaluation["metrics"], "quality_status": "needs_review", "finished_at": now(), "eta_seconds": 0})
         return 0
     except (Exception, KeyboardInterrupt) as error:

@@ -249,7 +249,7 @@ def jobs(request):
         if not checkpoint.is_file(): raise ApiError(409, "所选模型权重尚未就绪")
         if submitted.model_id.startswith("trained:") and trained["config"].get("backend") == "yolo":
             configuration = DetectionConfig(model=str(checkpoint), data=data, threshold=configuration.threshold,
-                                            imgsz=trained["config"]["imgsz"])
+                                            imgsz=trained["config"]["imgsz"], architecture=trained["config"].get("architecture", "yolov8n.pt"))
         else:
             if submitted.media_type == "video": raise ApiError(422, "视频仅支持已训练的目标检测模型")
             configuration = load_mixercseg_config("mixercseg_infer", {"model": str(checkpoint), "hog_bins": bins,

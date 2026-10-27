@@ -1,0 +1,24 @@
+# 对照原 YOLOv8n / 640 基线;保留 wsodd 冻结划分与 14 类标签。
+# 根据验证集选择 best,完成后仅对选定模型进行独立 test。
+backend: yolo
+data: wsodd
+architecture: yolov8s.pt
+device: cuda
+epochs: 60
+batch_size_train: 16
+batch_size_test: 16
+imgsz: 960
+lr: 0.0005
+weight_decay: 0.0005
+optimizer: AdamW
+cos_lr: true
+warmup_bias_lr: 0.01
+mosaic: 0.5
+scale: 0.3
+hsv_s: 0.5
+close_mosaic: 15
+seed: 42
+num_threads: 4
+torch_threads: 4
+threshold: 0.25
+iou: 0.7

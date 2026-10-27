@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#147d68">
   <title>ODPlatform · 训练工作台</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=workspace-4">
+  <link rel="stylesheet" href="/assets/styles.css?v=accuracy-1">
   <script src="/assets/vendor/vue.global.prod.js" defer></script>
-  <script src="/assets/app.js?v=workspace-4" defer></script>
-  <script src="/assets/assistant.js?v=workspace-4" defer></script>
-  <script src="/assets/workspace.js?v=workspace-4" defer></script>
+  <script src="/assets/app.js?v=accuracy-1" defer></script>
+  <script src="/assets/assistant.js?v=accuracy-1" defer></script>
+  <script src="/assets/workspace.js?v=accuracy-1" defer></script>
   <script src="/assets/datasets.js?v=detect-upload-2" defer></script>
 </head>
 <body>
@@ -138,7 +138,7 @@
     </main>
     <footer class="page-footer"><span>ODPlatform</span><span>YOLOv8 / WSODD 水面目标检测工作台</span></footer>
   </div>
-  <dialog id="config-dialog"><form id="training-form"><div class="dialog-heading"><div><span class="eyebrow">NEW EXPERIMENT</span><h2>完整训练配置</h2></div><button type="button" class="icon-button" id="close-config" aria-label="关闭配置">×</button></div><p class="body-copy">使用远程 GPU 保留原始模型配方，训练后自动进行独立测试并回传可视化结果。</p><div class="form-grid"><label>训练数据集<select name="data" id="training-dataset"><option value="wsodd">WSODD</option></select></label><label>计算设备<select name="device" id="training-device"><option value="cuda">远程 CUDA GPU</option></select></label></div><label class="form-label">实验名称<input name="name" value="WSODD 完整实验" maxlength="80" required></label><div class="form-grid"><label>训练轮次<input name="epochs" type="number" value="50" min="1" max="1000" required></label><label>训练批大小<input name="batch_size_train" type="number" value="16" min="1" max="64" required></label><label>学习率<input name="lr" type="number" value="0.001" min="0.000002" max="1" step="any" required></label><label>随机种子<input name="seed" type="number" value="42" step="1" required></label></div><div class="recipe-summary" id="recipe-summary"><span>YOLOv8n</span><span>640 × 640</span><span>AdamW · lr 0.001</span><span>14 类目标检测</span></div><label class="form-label" id="f1-target-label" hidden>历史分割 F1 目标（检测不使用）<input name="min_f1" type="number" min="0" max="1" step="0.01" placeholder="留空时报告实际效果，由人工评审"></label><div id="config-readiness" class="environment-message">检测计算环境</div><div class="dialog-actions"><button type="button" id="save-draft" class="button secondary">保存配置</button><button type="submit" class="button primary" id="start-training" disabled>等待远程 GPU</button></div></form></dialog>
+  <dialog id="config-dialog"><form id="training-form"><div class="dialog-heading"><div><span class="eyebrow">NEW EXPERIMENT</span><h2>完整训练配置</h2></div><button type="button" class="icon-button" id="close-config" aria-label="关闭配置">×</button></div><p class="body-copy">使用远程 GPU 保留原始模型配方，训练后自动进行独立测试并回传可视化结果。</p><div class="form-grid"><label>训练数据集<select name="data" id="training-dataset"><option value="wsodd">WSODD</option></select></label><label>计算设备<select name="device" id="training-device"><option value="cuda">远程 CUDA GPU</option></select></label></div><label class="form-label">实验名称<input name="name" value="WSODD 完整实验" maxlength="80" required></label><div class="form-grid" id="detection-options"><label>检测模型<select name="architecture"><option value="yolov8n.pt">YOLOv8n · 基线</option><option value="yolov8s.pt">YOLOv8s</option><option value="yolov8m.pt">YOLOv8m</option></select></label><label>输入尺寸<select name="imgsz"><option value="640">640 × 640</option><option value="960">960 × 960</option><option value="1280">1280 × 1280</option></select></label></div><div class="form-grid"><label>训练轮次<input name="epochs" type="number" value="50" min="1" max="1000" required></label><label>训练批大小<input name="batch_size_train" type="number" value="16" min="1" max="64" required></label><label>学习率<input name="lr" type="number" value="0.001" min="0.000002" max="1" step="any" required></label><label>随机种子<input name="seed" type="number" value="42" step="1" required></label></div><div class="recipe-summary" id="recipe-summary"><span>YOLOv8n</span><span>640 × 640</span><span>AdamW · lr 0.001</span><span>14 类目标检测</span></div><label class="form-label" id="f1-target-label" hidden>历史分割 F1 目标（检测不使用）<input name="min_f1" type="number" min="0" max="1" step="0.01" placeholder="留空时报告实际效果，由人工评审"></label><div id="config-readiness" class="environment-message">检测计算环境</div><div class="dialog-actions"><button type="button" id="save-draft" class="button secondary">保存配置</button><button type="submit" class="button primary" id="start-training" disabled>等待远程 GPU</button></div></form></dialog>
   <div id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
