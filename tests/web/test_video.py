@@ -87,6 +87,19 @@ def test_video_range_download_and_explanation_use_summary_only(web, monkeypatch)
     assert response.status_code == 206 and response.content == b"2345"
     assert response.headers["Content-Range"] == "bytes 2-5/10"
     assert client.get(f"/api/jobs/{identifier}/files/run/annotated.mp4", headers={"Range":"bytes=100-"}).status_code == 416
+    assert client.get(f"/api/jobs/{identifier}/files/run/annotated.mp4?download=true").content == b"0123456789"
+    # ASGI 使用原生异步迭代器,避免 Django 将整个视频读入内存再发送。
+    import asyncio
+    from django.test import AsyncRequestFactory
+    from od_web import views
+    async def collect(range_header):
+        request = AsyncRequestFactory().get("/video", headers={"Range": range_header} if range_header else {})
+        request.META["od.job_store"] = store
+        response = views.artifact(request, identifier, "run/annotated.mp4")
+        assert response.is_async
+        return b"".join([chunk async for chunk in response.streaming_content])
+    assert asyncio.run(collect("bytes=2-5")) == b"2345"
+    assert asyncio.run(collect(None)) == b"0123456789"
     def ask(message, evidence):
         assert "must not send" not in json.dumps(evidence)
         assert evidence["video_analysis"]["class_summary"]["ship"]["frame_occurrences"] == 10

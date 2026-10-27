@@ -326,15 +326,19 @@ def artifacts(request, job_id):
 @endpoint(["GET"])
 def artifact(request, job_id, relative):
     path = store(request).artifact(job_id, relative)
-    if path.suffix == ".mp4" and request.META.get("HTTP_RANGE"):
+    if path.suffix == ".mp4":
+        import asyncio
         import re
+        from django.core.handlers.asgi import ASGIRequest
         from django.http import StreamingHttpResponse
-        size = path.stat().st_size
-        match = re.fullmatch(r"bytes=(\d*)-(\d*)", request.META["HTTP_RANGE"])
-        if not match or not any(match.groups()): return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
-        first, last = match.groups()
-        start = int(first) if first else max(0, size-int(last)); end = min(size-1, int(last)) if first and last else size-1
-        if start > end or start >= size: return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
+        from django.utils.http import content_disposition_header
+        size = path.stat().st_size; start = 0; end = size-1; range_header = request.META.get("HTTP_RANGE")
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
+            if not match or not any(match.groups()): return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
+            first, last = match.groups()
+            start = int(first) if first else max(0, size-int(last)); end = min(size-1, int(last)) if first and last else size-1
+            if start > end or start >= size: return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
         def chunks():
             with path.open("rb") as stream:
                 stream.seek(start); remaining = end-start+1
@@ -342,8 +346,20 @@ def artifact(request, job_id, relative):
                     data = stream.read(min(remaining, 1024**2))
                     if not data: break
                     remaining -= len(data); yield data
-        return StreamingHttpResponse(chunks(), status=206, content_type="video/mp4", headers={"Accept-Ranges": "bytes",
-            "Content-Range": f"bytes {start}-{end}/{size}", "Content-Length": str(end-start+1)})
+        async def async_chunks():
+            stream = await asyncio.to_thread(path.open, "rb")
+            try:
+                await asyncio.to_thread(stream.seek, start); remaining = end-start+1
+                while remaining > 0:
+                    data = await asyncio.to_thread(stream.read, min(remaining, 1024**2))
+                    if not data: break
+                    remaining -= len(data); yield data
+            finally: await asyncio.to_thread(stream.close)
+        headers = {"Accept-Ranges": "bytes", "Content-Length": str(max(0, end-start+1))}
+        if range_header: headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        if request.GET.get("download") == "true": headers["Content-Disposition"] = content_disposition_header(True, path.name)
+        return StreamingHttpResponse(async_chunks() if isinstance(request, ASGIRequest) else chunks(),
+            status=206 if range_header else 200, content_type="video/mp4", headers=headers)
     return FileResponse(path.open("rb"), as_attachment=request.GET.get("download") == "true", filename=path.name)
 
 
