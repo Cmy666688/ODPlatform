@@ -107,8 +107,11 @@ def configure_environment() -> None:
 
 def main() -> None:
     import django
+    import os
     import uvicorn
-    parser = argparse.ArgumentParser(); parser.add_argument("--port", type=int, default=8000)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=int(os.environ.get("ODP_WEB_PORT", "8000")))
+    parser.add_argument("--host", default=os.environ.get("ODP_WEB_HOST", "127.0.0.1"))
     arguments = parser.parse_args()
     configure_environment()
     django.setup()
@@ -118,7 +121,7 @@ def main() -> None:
     call_command("collectstatic", interactive=False, verbosity=0)
     from od_platform.common.retention import start_scheduler
     start_scheduler()
-    uvicorn.run(get_asgi_application(), host="127.0.0.1", port=arguments.port, lifespan="off")
+    uvicorn.run(get_asgi_application(), host=arguments.host, port=arguments.port, lifespan="off")
 
 
 if __name__ == "__main__": main()

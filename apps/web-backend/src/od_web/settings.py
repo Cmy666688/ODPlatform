@@ -8,7 +8,12 @@ from od_platform.common import paths
 BASE_DIR = Path(__file__).resolve().parent
 SECRET_KEY = os.environ.get("ODP_DJANGO_SECRET", secrets.token_urlsafe(48))
 DEBUG = False
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
+# 公网部署时通过环境变量追加主机名/IP 与可信源(逗号分隔),本机开发默认不变。
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"] + [h.strip() for h in os.environ.get("ODP_ALLOWED_HOSTS", "").split(",") if h.strip()]
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get("ODP_CSRF_ORIGINS", "").split(",") if o.strip()]
+# 反向代理/隧道终止 TLS 后,浏览器地址栏是 https 而 uvicorn 收到的是明文 http。
+# 不告知 Django 真实协议,CSRF 校验会因 scheme 不一致把合法的 https 表单判为非法。
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 ROOT_URLCONF = "od_web.urls"
 INSTALLED_APPS = ["django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
                   "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles", "od_web"]
